@@ -66,9 +66,10 @@ build-python-layer: clone-upstream ## Build the Python full layer from source
 	# Copy otel-instrument to root level (like upstream)
 	@cp $(DIST_DIR)/python-layer-temp/python/otel-instrument $(DIST_DIR)/python-layer-temp/
 	# Set permissions
-	@chmod 755 $(DIST_DIR)/python-layer-temp/otel-instrument
-	@chmod 755 $(DIST_DIR)/python-layer-temp/python/otel-instrument
-	@chmod 755 $(DIST_DIR)/python-layer-temp/python/otel-handler
+	@if [ -f $(DIST_DIR)/python-layer-temp/otel-instrument ]; then chmod 755 $(DIST_DIR)/python-layer-temp/otel-instrument; fi
+	@if [ -f $(DIST_DIR)/python-layer-temp/otel-handler ]; then chmod 755 $(DIST_DIR)/python-layer-temp/otel-handler; fi
+	@if [ -f $(DIST_DIR)/python-layer-temp/python/otel-instrument ]; then chmod 755 $(DIST_DIR)/python-layer-temp/python/otel-instrument; fi
+	@if [ -f $(DIST_DIR)/python-layer-temp/python/otel-handler ]; then chmod 755 $(DIST_DIR)/python-layer-temp/python/otel-handler; fi
 	# Remove unwanted packages
 	@rm -rf $(DIST_DIR)/python-layer-temp/python/boto*
 	@rm -rf $(DIST_DIR)/python-layer-temp/python/urllib3*
