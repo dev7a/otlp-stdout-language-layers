@@ -73,7 +73,9 @@ jobs:
           
           LAYER_NAME=$LAYER_NAME-${{ inputs.release-group }}
           
-          UPSTREAM_VERSION_CLEANED=$(echo "${{ inputs.upstream-version }}" | sed -r 's/\./_/g')
+          # Clean up upstream version for layer naming
+          # Remove layer-python/ or layer-nodejs/ prefix if present, then clean special chars
+          UPSTREAM_VERSION_CLEANED=$(echo "${{ inputs.upstream-version }}" | sed -E 's|^layer-[^/]+/||' | sed -r 's/[\.\/]/_/g')
           if [[ -n "$UPSTREAM_VERSION_CLEANED" ]]; then
             LAYER_NAME=$LAYER_NAME-$UPSTREAM_VERSION_CLEANED
           fi
