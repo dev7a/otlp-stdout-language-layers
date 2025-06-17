@@ -8,10 +8,9 @@ on:
         required: true
         type: choice
         options:
-          - both
           - python
           - nodejs
-        default: both
+        default: python
       exporter-version:
         description: 'Version of otlp-stdout-span-exporter to use'
         required: false
@@ -50,7 +49,7 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
   prepare-build-jobs:
@@ -62,12 +61,7 @@ jobs:
       - id: prepare-build-jobs
         name: Prepare Build Jobs
         run: |
-          languages=''
-          if [ "${{ github.event.inputs.language }}" == 'both' ]; then
-            languages='["python", "nodejs"]'
-          else
-            languages='["${{ github.event.inputs.language }}"]'
-          fi
+          languages='["${{ github.event.inputs.language }}"]'
           echo "build_jobs={\"language\": ${languages}}" | tr -d '[:space:]' >> $GITHUB_OUTPUT
 
       - id: prepare-regions
@@ -141,17 +135,17 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: otlp-stdout-python-layer-manual.zip
-          path: dist/otlp-stdout-python-main.zip
+          path: dist/otlp-stdout-python-*.zip
 
       - name: Upload Node.js Layer Artifact
         if: matrix.language == 'nodejs'
         uses: actions/upload-artifact@v4
         with:
           name: otlp-stdout-nodejs-layer-manual.zip
-          path: dist/otlp-stdout-node-main.zip
+          path: dist/otlp-stdout-node-*.zip
 
   publish-python-layer:
-    if: contains(github.event.inputs.language, 'python') || github.event.inputs.language == 'both'
+    if: github.event.inputs.language == 'python'
     uses: ./.github/workflows/layer-publish.yml
     needs: [prepare-build-jobs, build-layers]
     strategy:
@@ -167,7 +161,7 @@ jobs:
     secrets: inherit
 
   publish-nodejs-layer:
-    if: contains(github.event.inputs.language, 'nodejs') || github.event.inputs.language == 'both'
+    if: github.event.inputs.language == 'nodejs'
     uses: ./.github/workflows/layer-publish.yml
     needs: [prepare-build-jobs, build-layers]
     strategy:
@@ -180,4 +174,88 @@ jobs:
       runtimes: nodejs22.x
       release-group: ${{ github.event.inputs.release-group }}
       aws_region: ${{ matrix.aws_region }}
-    secrets: inherit 
+    secrets: inherit
+
+  create-release:
+    if: startsWith(github.event.inputs.upstream-branch, 'v') || startsWith(github.event.inputs.upstream-branch, 'layer-')
+    runs-on: ubuntu-latest
+    needs: [prepare-build-jobs, build-layers]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine release tag
+        id: release-tag
+        run: |
+          UPSTREAM="${{ github.event.inputs.upstream-branch }}"
+          LANGUAGE="${{ github.event.inputs.language }}"
+          
+          if [[ "$UPSTREAM" == layer-* ]]; then
+            # Use upstream tag as-is if it already has layer- prefix
+            RELEASE_TAG="$UPSTREAM"
+          elif [[ "$UPSTREAM" == v* ]]; then
+            # Convert v0.14.0 to layer-python/0.14.0 or layer-nodejs/0.14.0
+            VERSION=${UPSTREAM#v}
+            RELEASE_TAG="layer-$LANGUAGE/$VERSION"
+          else
+            echo "::error::Upstream branch '$UPSTREAM' doesn't look like a release tag"
+            exit 1
+          fi
+          
+          echo "release-tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "Release tag will be: $RELEASE_TAG"
+
+      - name: Collect layer ARNs
+        id: collect-arns
+        run: |
+          # Create a summary of published layers
+          echo "## Published Layer ARNs" > release_notes.md
+          echo "" >> release_notes.md
+          
+          # This would need to be expanded to actually collect the ARNs from the matrix jobs
+          # For now, we'll create a placeholder structure
+          echo "### ${{ github.event.inputs.language }} Layer" >> release_notes.md
+          echo "" >> release_notes.md
+          
+          # Create ARN template - users will need to replace YOUR_ACCOUNT with their actual account ID
+          LANGUAGE="${{ github.event.inputs.language }}"
+          RELEASE_GROUP="${{ github.event.inputs.release-group }}"
+          UPSTREAM_VERSION_CLEAN=$(echo "${{ needs.build-layers.outputs.UPSTREAM_VERSION }}" | sed 's/\./_/g')
+          LAYER_NAME_BASE="otlp-stdout-$LANGUAGE-$RELEASE_GROUP-$UPSTREAM_VERSION_CLEAN"
+          
+          # List all regions where layer was published
+          regions_json='${{ needs.prepare-build-jobs.outputs.regions }}'
+          regions=($(echo "$regions_json" | jq -r '.aws_region[]'))
+          
+          for region in "${regions[@]}"; do
+            echo "- **$region**: \`arn:aws:lambda:$region:YOUR_ACCOUNT_ID:layer:$LAYER_NAME_BASE:1\`" >> release_notes.md
+          done
+          
+          echo "" >> release_notes.md
+          echo "### Usage" >> release_notes.md
+          echo "" >> release_notes.md
+          
+          if [[ "${{ github.event.inputs.language }}" == "python" ]]; then
+            echo "Add this layer to your Lambda function and set:" >> release_notes.md
+            echo "- \`AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-instrument\`" >> release_notes.md
+            echo "- \`OTEL_TRACES_EXPORTER=otlpstdout\`" >> release_notes.md
+          else
+            echo "Add this layer to your Lambda function and set:" >> release_notes.md
+            echo "- \`AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-handler\`" >> release_notes.md
+            echo "- \`OTEL_TRACES_EXPORTER=otlpstdout\`" >> release_notes.md
+          fi
+          
+          echo "" >> release_notes.md
+          echo "### Details" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **Upstream OpenTelemetry**: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}" >> release_notes.md
+          echo "- **OTLP Stdout Exporter**: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}" >> release_notes.md
+          echo "- **Release Group**: ${{ github.event.inputs.release-group }}" >> release_notes.md
+
+      - name: Create GitHub Release
+        run: |
+          gh release create "${{ steps.release-tag.outputs.release-tag }}" \
+            --title "OTLP Stdout ${{ github.event.inputs.language }} Layer ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}" \
+            --notes-file release_notes.md \
+            --draft=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

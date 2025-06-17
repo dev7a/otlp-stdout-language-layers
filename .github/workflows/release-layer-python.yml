@@ -65,17 +65,22 @@ jobs:
       - name: Show layer contents
         run: |
           ls -al dist/
-          unzip -l dist/otlp-stdout-python-main.zip | head -20
+          # Show the actual zip file created (with version in name)
+          ZIP_FILE=$(ls dist/otlp-stdout-python-*.zip | head -1)
+          echo "Found layer file: $ZIP_FILE"
+          unzip -l "$ZIP_FILE" | head -20
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@v4
         name: Save assembled layer
         with:
           name: otlp-stdout-python-layer.zip
-          path: dist/otlp-stdout-python-main.zip
+          path: dist/otlp-stdout-python-*.zip
 
       - name: Add Binary to Release
         run: |
-          gh release upload ${{ github.ref_name }} dist/otlp-stdout-python-main.zip
+          # Find the actual zip file created
+          ZIP_FILE=$(ls dist/otlp-stdout-python-*.zip | head -1)
+          gh release upload ${{ github.ref_name }} "$ZIP_FILE"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -133,7 +138,7 @@ jobs:
           This layer has been published to all supported AWS regions.
           
           ### Downloads
-          - [otlp-stdout-python-main.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/otlp-stdout-python-main.zip)
+          - Layer zip file is attached to this release
           "
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

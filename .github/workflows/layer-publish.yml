@@ -2,6 +2,10 @@ name: Publish OTLP Stdout Lambda Layer
 
 on:
   workflow_call:
+    outputs:
+      layer-arn:
+        description: "ARN of the published layer"
+        value: ${{ jobs.publish_layer.outputs.layer-arn }}
     inputs:
       artifact-name:
         description: 'Name of the artifact containing the layer zip file'
@@ -48,6 +52,8 @@ permissions:
 jobs:
   publish_layer:
     runs-on: ubuntu-latest
+    outputs:
+      layer-arn: ${{ steps.publish-layer.outputs.layer-arn }}
     steps:
       - name: Construct Layer Name
         shell: bash
@@ -102,6 +108,7 @@ jobs:
           mask-aws-account-id: false
 
       - name: Publish Lambda Layer
+        id: publish-layer
         run: |
           # Find the actual zip file (should be the only one)
           ZIP_FILE=$(ls *.zip | head -1)
@@ -119,6 +126,7 @@ jobs:
               --output text
           )
           echo "::notice ::Published $LAYER_ARN (component-version=${{ inputs.component-version }}, upstream-version=${{ inputs.upstream-version }})"
+          echo "layer-arn=$LAYER_ARN" >> $GITHUB_OUTPUT
 
       - name: Make Layer Public
         run: |

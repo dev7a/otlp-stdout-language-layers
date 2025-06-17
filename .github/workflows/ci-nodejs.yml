@@ -52,5 +52,8 @@ jobs:
       - name: Verify layer contents
         run: |
           cd dist
-          unzip -l otlp-stdout-node-main.zip | grep -E "(otlp-stdout|otel-handler)"
+          # Find the actual zip file created (with version in name)
+          ZIP_FILE=$(ls otlp-stdout-node-*.zip | head -1)
+          echo "Verifying layer file: $ZIP_FILE"
+          unzip -l "$ZIP_FILE" | grep -E "(otlp-stdout|otel-handler)"
           echo "✅ Node.js layer built successfully with required components" 
