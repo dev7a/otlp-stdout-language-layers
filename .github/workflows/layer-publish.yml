@@ -1,0 +1,126 @@
+name: Publish OTLP Stdout Lambda Layer
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: 'Name of the artifact containing the layer zip file'
+        required: true
+        type: string
+      layer-name:
+        description: 'Base layer name (e.g., otlp-stdout-python)'
+        required: true
+        type: string
+      component-version:
+        description: 'Version of the otlp-stdout component included in this release'
+        required: true
+        type: string
+      upstream-version:
+        description: 'Version of the upstream OpenTelemetry layer this is based on'
+        required: true
+        type: string
+      runtimes:
+        description: 'Space-delimited list of compatible Lambda runtimes'
+        required: true
+        type: string
+      architecture:
+        description: '(optional) amd64 or arm64'
+        required: false
+        type: string
+      release-group:
+        description: 'Release to dev or prod environment (Default: dev)'
+        required: false
+        default: dev
+        type: string
+      aws_region:
+        description: 'AWS region to publish to'
+        required: true
+        type: string
+      role-arn:
+        description: '(optional) AWS IAM Role ARN for publishing. Defaults to PROD_LAMBDA_ROLE_ARN secret.'
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish_layer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Construct Layer Name
+        shell: bash
+        run: |
+          LAYER_NAME=${{ inputs.layer-name }}
+          
+          if [[ -n "${{ inputs.architecture }}" ]]; then
+            LAYER_NAME=$LAYER_NAME-${{ inputs.architecture }}
+            ARCH=$(echo "${{ inputs.architecture }}" | sed -r 's/amd64/x86_64/g')
+          else
+            ARCH="x86_64 arm64"
+          fi
+          echo "ARCH=$ARCH" >> $GITHUB_ENV
+          
+          COMPATIBLE_RUNTIMES="--compatible-runtimes ${{ inputs.runtimes }}"
+          echo "COMPATIBLE_RUNTIMES=$COMPATIBLE_RUNTIMES" >> $GITHUB_ENV
+          
+          if [[ "${{ inputs.release-group }}" != "prod" ]]; then
+            LAYER_NAME=$LAYER_NAME-${{ inputs.release-group }}
+          fi
+          
+          UPSTREAM_VERSION_CLEANED=$(echo "${{ inputs.upstream-version }}" | sed -r 's/\./_/g')
+          if [[ -n "$UPSTREAM_VERSION_CLEANED" ]]; then
+            LAYER_NAME=$LAYER_NAME-$UPSTREAM_VERSION_CLEANED
+          fi
+          
+          echo "LAYER_NAME=$LAYER_NAME" >> $GITHUB_ENV
+          
+          echo "Layer configuration:"
+          echo "  Name: $LAYER_NAME"
+          echo "  Architecture: $ARCH"
+          echo "  Runtimes: ${{ inputs.runtimes }}"
+          echo "  Component version: ${{ inputs.component-version }}"
+          echo "  Upstream version: ${{ inputs.upstream-version }}"
+
+      - name: Download built layer
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.role-arn || secrets.OTEL_LAMBDA_LAYER_PUBLISH_ROLE_ARN }}
+          role-duration-seconds: 1200
+          aws-region: ${{ inputs.aws_region }}
+          mask-aws-account-id: false
+
+      - name: Publish Lambda Layer
+        run: |
+          LAYER_ARN=$(
+            aws lambda publish-layer-version \
+              --layer-name $LAYER_NAME \
+              --description "OTLP Stdout exporter for OpenTelemetry (component: ${{ inputs.component-version }}, upstream: ${{ inputs.upstream-version }})" \
+              --license-info "Apache 2.0" \
+              --compatible-architectures $ARCH \
+              $COMPATIBLE_RUNTIMES \
+              --zip-file fileb://${{ inputs.artifact-name }} \
+              --query 'LayerVersionArn' \
+              --output text
+          )
+          echo "::notice ::Published $LAYER_ARN (component-version=${{ inputs.component-version }}, upstream-version=${{ inputs.upstream-version }})"
+
+      - name: Make Layer Public
+        run: |
+          LAYER_VERSION=$(
+            aws lambda list-layer-versions \
+              --layer-name $LAYER_NAME \
+              --query 'max_by(LayerVersions, &Version).Version'
+          )
+          aws lambda add-layer-version-permission \
+            --layer-name $LAYER_NAME \
+            --version-number $LAYER_VERSION \
+            --principal "*" \
+            --statement-id publish \
+            --action lambda:GetLayerVersion 

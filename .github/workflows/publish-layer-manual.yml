@@ -1,0 +1,186 @@
+name: "Manual Layer Publish"
+
+on:
+  workflow_dispatch:
+    inputs:
+      language:
+        description: 'Language layer to publish'
+        required: true
+        type: choice
+        options:
+          - both
+          - python
+          - nodejs
+        default: both
+      exporter-version:
+        description: 'Version of otlp-stdout-span-exporter to use'
+        required: false
+        type: string
+        default: latest
+      aws-region:
+        description: 'AWS Region(s) where layer will be published'
+        required: true
+        type: choice
+        options:
+          - all
+          - ca-central-1
+          - ca-west-1
+          - eu-central-1
+          - eu-central-2
+          - eu-north-1
+          - eu-south-1
+          - eu-south-2
+          - eu-west-1
+          - eu-west-2
+          - eu-west-3
+          - us-east-1
+          - us-east-2
+          - us-west-2
+        default: us-east-1
+      release-group:
+        description: 'Release environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+      upstream-branch:
+        description: 'Upstream OpenTelemetry Lambda branch to build from'
+        required: false
+        type: string
+        default: main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  prepare-build-jobs:
+    runs-on: ubuntu-latest
+    outputs:
+      build_jobs: ${{ steps.prepare-build-jobs.outputs.build_jobs }}
+      regions: ${{ steps.prepare-regions.outputs.regions }}
+    steps:
+      - id: prepare-build-jobs
+        name: Prepare Build Jobs
+        run: |
+          languages=''
+          if [ "${{ github.event.inputs.language }}" == 'both' ]; then
+            languages='["python", "nodejs"]'
+          else
+            languages='["${{ github.event.inputs.language }}"]'
+          fi
+          echo "build_jobs={\"language\": ${languages}}" | tr -d '[:space:]' >> $GITHUB_OUTPUT
+
+      - id: prepare-regions
+        name: Prepare Regions
+        run: |
+          regions=''
+          if [ "${{ github.event.inputs.aws-region }}" == 'all' ]; then
+            regions='["ap-northeast-1", "ap-northeast-2", "ap-south-1", "ap-southeast-1", "ap-southeast-2", "ca-central-1", "eu-central-1", "eu-north-1", "eu-west-1", "eu-west-2", "eu-west-3", "sa-east-1", "us-east-1", "us-east-2", "us-west-1", "us-west-2"]'
+          else
+            regions='["${{ github.event.inputs.aws-region }}"]'
+          fi
+          echo "regions={\"aws_region\": ${regions}}" | tr -d '[:space:]' >> $GITHUB_OUTPUT
+
+  build-layers:
+    needs: prepare-build-jobs
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare-build-jobs.outputs.build_jobs) }}
+    outputs:
+      EXPORTER_VERSION: ${{ steps.save-exporter-version.outputs.EXPORTER_VERSION }}
+      UPSTREAM_VERSION: ${{ steps.save-upstream-version.outputs.UPSTREAM_VERSION }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4 # v4.2.2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Setup Node.js
+        if: matrix.language == 'nodejs'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Save versions
+        id: save-versions
+        run: |
+          EXPORTER_VERSION="${{ github.event.inputs.exporter-version }}"
+          UPSTREAM_VERSION="${{ github.event.inputs.upstream-branch }}"
+          echo "EXPORTER_VERSION=$EXPORTER_VERSION" >> $GITHUB_OUTPUT
+          echo "UPSTREAM_VERSION=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Save Exporter Version
+        id: save-exporter-version
+        run: |
+          echo "EXPORTER_VERSION=${{ steps.save-versions.outputs.EXPORTER_VERSION }}" >> $GITHUB_OUTPUT
+
+      - name: Save Upstream Version
+        id: save-upstream-version
+        run: |
+          echo "UPSTREAM_VERSION=${{ steps.save-versions.outputs.UPSTREAM_VERSION }}" >> $GITHUB_OUTPUT
+
+      - name: Build Python Layer
+        if: matrix.language == 'python'
+        run: make build-python-layer
+        env:
+          UPSTREAM_BRANCH: ${{ github.event.inputs.upstream-branch }}
+          EXPORTER_VERSION: ${{ github.event.inputs.exporter-version }}
+
+      - name: Build Node.js Layer
+        if: matrix.language == 'nodejs'
+        run: make build-node-layer
+        env:
+          UPSTREAM_BRANCH: ${{ github.event.inputs.upstream-branch }}
+          EXPORTER_VERSION: ${{ github.event.inputs.exporter-version }}
+
+      - name: Upload Python Layer Artifact
+        if: matrix.language == 'python'
+        uses: actions/upload-artifact@v4
+        with:
+          name: otlp-stdout-python-layer-manual.zip
+          path: dist/otlp-stdout-python-main.zip
+
+      - name: Upload Node.js Layer Artifact
+        if: matrix.language == 'nodejs'
+        uses: actions/upload-artifact@v4
+        with:
+          name: otlp-stdout-nodejs-layer-manual.zip
+          path: dist/otlp-stdout-node-main.zip
+
+  publish-python-layer:
+    if: contains(github.event.inputs.language, 'python') || github.event.inputs.language == 'both'
+    uses: ./.github/workflows/layer-publish.yml
+    needs: [prepare-build-jobs, build-layers]
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare-build-jobs.outputs.regions) }}
+    with:
+      artifact-name: otlp-stdout-python-layer-manual.zip
+      layer-name: otlp-stdout-python
+      component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
+      upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
+      runtimes: python3.8 python3.9 python3.10 python3.11 python3.12 python3.13
+      release-group: ${{ github.event.inputs.release-group }}
+      aws_region: ${{ matrix.aws_region }}
+    secrets: inherit
+
+  publish-nodejs-layer:
+    if: contains(github.event.inputs.language, 'nodejs') || github.event.inputs.language == 'both'
+    uses: ./.github/workflows/layer-publish.yml
+    needs: [prepare-build-jobs, build-layers]
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare-build-jobs.outputs.regions) }}
+    with:
+      artifact-name: otlp-stdout-nodejs-layer-manual.zip
+      layer-name: otlp-stdout-nodejs
+      component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
+      upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
+      runtimes: nodejs18.x nodejs20.x nodejs22.x
+      release-group: ${{ github.event.inputs.release-group }}
+      aws_region: ${{ matrix.aws_region }}
+    secrets: inherit 

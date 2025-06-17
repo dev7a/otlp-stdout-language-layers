@@ -1,0 +1,139 @@
+name: "Release Python OTLP Stdout Layer"
+
+on:
+  push:
+    tags:
+      - layer-python/**
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Release
+        run: gh release create ${{ github.ref_name }} --draft --title ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-layer:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    needs: create-release
+    outputs:
+      EXPORTER_VERSION: ${{ steps.save-exporter-version.outputs.EXPORTER_VERSION }}
+      UPSTREAM_VERSION: ${{ steps.save-upstream-version.outputs.UPSTREAM_VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Extract version from tag
+        id: extract-version
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          EXPORTER_VERSION=$(echo "$TAG_NAME" | sed -E 's/layer-python\/(.+)/\1/')
+          echo "EXPORTER_VERSION=$EXPORTER_VERSION" >> $GITHUB_ENV
+          echo "EXPORTER_VERSION=$EXPORTER_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Save Exporter Version
+        id: save-exporter-version
+        run: |
+          echo "EXPORTER_VERSION=${{ env.EXPORTER_VERSION }}" >> $GITHUB_OUTPUT
+
+      - name: Save Upstream Version
+        id: save-upstream-version
+        run: |
+          # Use the extracted version to determine upstream branch/tag
+          UPSTREAM_VERSION="${{ env.EXPORTER_VERSION }}"
+          echo "UPSTREAM_VERSION=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build Python Layer
+        run: make build-python-layer
+        env:
+          UPSTREAM_BRANCH: v${{ env.EXPORTER_VERSION }}
+          EXPORTER_VERSION: latest
+
+      - name: Show layer contents
+        run: |
+          ls -al dist/
+          unzip -l dist/otlp-stdout-python-main.zip | head -20
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        name: Save assembled layer
+        with:
+          name: otlp-stdout-python-layer.zip
+          path: dist/otlp-stdout-python-main.zip
+
+      - name: Add Binary to Release
+        run: |
+          gh release upload ${{ github.ref_name }} dist/otlp-stdout-python-main.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-layer:
+    uses: ./.github/workflows/layer-publish.yml
+    needs: build-layer
+    strategy:
+      matrix:
+        aws_region: 
+          - ca-central-1
+          - ca-west-1
+          - eu-central-1
+          - eu-central-2
+          - eu-north-1
+          - eu-south-1
+          - eu-south-2
+          - eu-west-1
+          - eu-west-2
+          - eu-west-3
+          - us-east-1
+          - us-east-2
+          - us-west-2
+    with:
+      artifact-name: otlp-stdout-python-layer.zip
+      layer-name: otlp-stdout-python
+      component-version: latest
+      upstream-version: ${{ needs.build-layer.outputs.UPSTREAM_VERSION }}
+      runtimes: python3.8 python3.9 python3.10 python3.11 python3.12 python3.13
+      release-group: prod
+      aws_region: ${{ matrix.aws_region }}
+    secrets: inherit
+
+  finalize-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    needs: [build-layer, publish-layer]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish GitHub Release
+        run: |
+          gh release edit ${{ github.ref_name }} --draft=false --notes "
+          ## OTLP Stdout Python Layer ${{ needs.build-layer.outputs.UPSTREAM_VERSION }}
+          
+          This release contains a Python Lambda layer with:
+          - **Upstream OpenTelemetry**: v${{ needs.build-layer.outputs.UPSTREAM_VERSION }}
+          - **OTLP Stdout Exporter**: latest version
+          
+          ### Usage
+          Add this layer to your Lambda function and set:
+          - \`AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-instrument\`
+          - \`OTEL_TRACES_EXPORTER=otlpstdout\`
+          
+          ### Published Regions
+          This layer has been published to all supported AWS regions.
+          
+          ### Downloads
+          - [otlp-stdout-python-main.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/otlp-stdout-python-main.zip)
+          "
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

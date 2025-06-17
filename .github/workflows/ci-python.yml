@@ -1,0 +1,52 @@
+name: "Continuous Build (Python)"
+
+on:
+  push:
+    paths:
+      - 'python/**'
+      - 'Makefile'
+      - '.github/workflows/ci-python.yml'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'python/**'
+      - 'Makefile'
+      - '.github/workflows/ci-python.yml'
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install otlp-stdout-span-exporter
+
+      - name: Build Python Layer
+        run: make build-python-layer
+        env:
+          UPSTREAM_BRANCH: main
+          EXPORTER_VERSION: latest
+
+      - name: Verify layer contents
+        run: |
+          cd dist
+          unzip -l otlp-stdout-python-main.zip | grep -E "(otlp_stdout|otel)"
+          echo "✅ Layer built successfully with required components" 

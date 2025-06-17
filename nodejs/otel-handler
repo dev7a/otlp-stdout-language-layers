@@ -1,0 +1,18 @@
+#!/bin/bash
+
+set -ef -o pipefail
+
+# Load our patch first, then the upstream init
+export NODE_OPTIONS="${NODE_OPTIONS} --import /opt/patch-full-layer.mjs --import /opt/init.mjs"
+
+# Preserve upstream logic for resource attributes
+if [[ $OTEL_RESOURCE_ATTRIBUTES != *"service.name="* ]]; then
+  export OTEL_RESOURCE_ATTRIBUTES="service.name=${AWS_LAMBDA_FUNCTION_NAME},${OTEL_RESOURCE_ATTRIBUTES}"
+fi
+
+# Preserve upstream logic for propagators
+if [[ -z "$OTEL_PROPAGATORS" ]]; then
+  export OTEL_PROPAGATORS="tracecontext,baggage,xray"
+fi
+
+exec "$@"

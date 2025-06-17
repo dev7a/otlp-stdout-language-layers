@@ -1,0 +1,56 @@
+name: "Continuous Build (Node.js)"
+
+on:
+  push:
+    paths:
+      - 'nodejs/**'
+      - 'Makefile'
+      - '.github/workflows/ci-nodejs.yml'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'nodejs/**'
+      - 'Makefile'
+      - '.github/workflows/ci-nodejs.yml'
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['18', '20', '22']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Setup Python for layer build
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install Node.js dependencies
+        run: |
+          npm install @dev7a/otlp-stdout-span-exporter
+
+      - name: Build Node.js Layer
+        run: make build-node-layer
+        env:
+          UPSTREAM_BRANCH: main
+          EXPORTER_VERSION: latest
+
+      - name: Verify layer contents
+        run: |
+          cd dist
+          unzip -l otlp-stdout-node-main.zip | grep -E "(otlp-stdout|otel-handler)"
+          echo "✅ Node.js layer built successfully with required components" 
