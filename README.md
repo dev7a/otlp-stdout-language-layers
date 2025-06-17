@@ -1,10 +1,15 @@
-# OTLP Stdout Language Layers
+# OTLP/STDOUT Language Layers
 
-This repository provides AWS Lambda layers that enhance the standard OpenTelemetry (OTEL) layers by adding a efficient transport method for your telemetry data: **OTLP over stdout**.
+This repository provides AWS Lambda layers that enhance the standard [OpenTelemetry (OTEL) layers](https://github.com/open-telemetry/opentelemetry-lambda) by adding a efficient transport method for your telemetry data: **OTLP over stdout**.
 
 By using these layers, you can configure your Lambda functions to export traces directly to standard output, unlocking significant performance and operational benefits.
 
-The OTLP Stdout Span Exporter is a lightweight, efficient span exporter that writes OTLP spans to stdout. It is designed to be used in AWS Lambda functions and is a great way to get started with OpenTelemetry. The packages are available on [PyPI](https://pypi.org/project/otlp-stdout-span-exporter/) and [npm](https://www.npmjs.com/package/@dev7a/otlp-stdout-span-exporter) if you want to use them in your own projects.
+The OTLP Stdout Span Exporter is a lightweight, efficient span exporter that writes OTLP spans to stdout. It is designed to be used in AWS Lambda functions and is a great way to get started with OpenTelemetry. The packages are available on [NPM](https://www.npmjs.com/package/@dev7a/otlp-stdout-span-exporter) and [PyPI](https://pypi.org/project/otlp-stdout-span-exporter/) and [if you want to use them in your own projects:
+
+[![npm](https://img.shields.io/npm/v/%40dev7a%2Fotlp-stdout-span-exporter?style=for-the-badge)](https://www.npmjs.com/package/@dev7a/otlp-stdout-span-exporter)  [![PyPI](https://img.shields.io/pypi/v/otlp-stdout-span-exporter?style=for-the-badge)](https://pypi.org/project/otlp-stdout-span-exporter/)
+
+> [!NOTE]
+> This project is a work in progress and is subject to change. Use at your own risk.
 
 ---
 ## Motivation
@@ -12,6 +17,11 @@ The OTLP Stdout Span Exporter is a lightweight, efficient span exporter that wri
 In modern serverless architectures, sending observability data via traditional network exporters (like OTLP over HTTP or gRPC) can introduce unnecessary overhead. Every millisecond counts, and network operations are a common source of latency and configuration complexity.
 
 The `otlp-stdout` approach simplifies this by treating telemetry as a logging concern. Instead of pushing data from the function, it writes compressed OTLP spans to `stdout`. This stream is automatically captured by the Lambda runtime and sent to CloudWatch Logs. From there, a log-forwarding pipeline can parse the OTLP data and send it to any observability backend, turning your logging pipeline into a robust and efficient telemetry pipeline.
+
+> [!NOTE]
+> Currently we are supporting only the traces signal, other signals (logs and metrics) will still be using the standard OTLP over http or gRPC methods. If you are using these signals, you should use the standard OTEL layers.
+
+
 
 ## Key Benefits
 
@@ -95,7 +105,7 @@ The publish targets will:
 
 1. Publish the layers to your AWS account (or use CI/CD)
 2. Attach **one** layer to your Lambda function
-3. Set the wrapper environment variable:
+3. Set the wrapper environment variable (current v0.14.0 standards):
    * Python: `AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-instrument`
    * Node.js: `AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-handler`
 4. Configure the exporter:
@@ -103,6 +113,9 @@ The publish targets will:
    OTEL_TRACES_EXPORTER=otlpstdout
    OTLP_STDOUT_SPAN_EXPORTER_COMPRESSION_LEVEL=6   # optional, default 6
    ```
+> [!IMPORTANT]
+> **Future configuration for the python layer (post v0.14.0):**
+> Following the OpenTelemetry community's standardization effort ([Issue #1788](https://github.com/open-telemetry/opentelemetry-lambda/issues/1788), [PR #1837](https://github.com/open-telemetry/opentelemetry-lambda/pull/1837)), all languages will standardize on `/opt/otel-handler`:so, fot **all languages** you should use `AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-handler`
 
 ---
 ## Example layer configuration
@@ -113,7 +126,7 @@ Layers:
   - arn:aws:lambda:us-east-1:961341555982:layer:otlp-stdout-python-main:2
 Environment:
   Variables:
-    AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-instrument
+    AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-instrument  # current standard for v0.14.0
     OTEL_TRACES_EXPORTER: otlpstdout
 ```
 
