@@ -46,7 +46,7 @@ on:
           - prod
         default: dev
       upstream-branch:
-        description: 'Upstream OpenTelemetry Lambda branch to build from'
+        description: 'Upstream OpenTelemetry Lambda branch or tag to build from (e.g., main, v0.14.0)'
         required: false
         type: string
         default: main
