@@ -78,7 +78,7 @@ jobs:
         run: |
           regions=''
           if [ "${{ github.event.inputs.aws-region }}" == 'all' ]; then
-            regions='["ap-northeast-1", "ap-northeast-2", "ap-south-1", "ap-southeast-1", "ap-southeast-2", "ca-central-1", "eu-central-1", "eu-north-1", "eu-west-1", "eu-west-2", "eu-west-3", "sa-east-1", "us-east-1", "us-east-2", "us-west-1", "us-west-2"]'
+            regions='["ca-central-1", "ca-west-1", "eu-central-1", "eu-central-2", "eu-north-1", "eu-south-1", "eu-south-2", "eu-west-1", "eu-west-2", "eu-west-3", "us-east-1", "us-east-2", "us-west-2"]'
           else
             regions='["${{ github.event.inputs.aws-region }}"]'
           fi
@@ -99,13 +99,13 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.13'
 
       - name: Setup Node.js
         if: matrix.language == 'nodejs'
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
 
       - name: Save versions
         id: save-versions
@@ -164,7 +164,7 @@ jobs:
       layer-name: otlp-stdout-python
       component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
       upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
-      runtimes: python3.8 python3.9 python3.10 python3.11 python3.12 python3.13
+      runtimes: python3.13
       release-group: ${{ github.event.inputs.release-group }}
       aws_region: ${{ matrix.aws_region }}
     secrets: inherit
@@ -180,7 +180,7 @@ jobs:
       layer-name: otlp-stdout-nodejs
       component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
       upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
-      runtimes: nodejs18.x nodejs20.x nodejs22.x
+      runtimes: nodejs22.x
       release-group: ${{ github.event.inputs.release-group }}
       aws_region: ${{ matrix.aws_region }}
     secrets: inherit 

@@ -34,11 +34,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.13'
 
       - name: Extract version from tag
         id: extract-version
@@ -107,7 +107,7 @@ jobs:
       layer-name: otlp-stdout-nodejs
       component-version: latest
       upstream-version: ${{ needs.build-layer.outputs.UPSTREAM_VERSION }}
-      runtimes: nodejs18.x nodejs20.x nodejs22.x
+      runtimes: nodejs22.x
       release-group: prod
       aws_region: ${{ matrix.aws_region }}
     secrets: inherit
