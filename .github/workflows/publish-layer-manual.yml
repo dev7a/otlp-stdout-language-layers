@@ -38,13 +38,10 @@ on:
           - us-west-2
         default: us-east-1
       release-group:
-        description: 'Release environment'
+        description: 'Release group name (e.g., beta, dev, prod, alpha)'
         required: true
-        type: choice
-        options:
-          - dev
-          - prod
-        default: dev
+        type: string
+        default: beta
       upstream-branch:
         description: 'Upstream OpenTelemetry Lambda branch or tag to build from (e.g., main, v0.14.0)'
         required: false

@@ -65,9 +65,7 @@ jobs:
           COMPATIBLE_RUNTIMES="--compatible-runtimes ${{ inputs.runtimes }}"
           echo "COMPATIBLE_RUNTIMES=$COMPATIBLE_RUNTIMES" >> $GITHUB_ENV
           
-          if [[ "${{ inputs.release-group }}" != "prod" ]]; then
-            LAYER_NAME=$LAYER_NAME-${{ inputs.release-group }}
-          fi
+          LAYER_NAME=$LAYER_NAME-${{ inputs.release-group }}
           
           UPSTREAM_VERSION_CLEANED=$(echo "${{ inputs.upstream-version }}" | sed -r 's/\./_/g')
           if [[ -n "$UPSTREAM_VERSION_CLEANED" ]]; then
