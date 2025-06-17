@@ -86,6 +86,13 @@ jobs:
         with:
           name: ${{ inputs.artifact-name }}
 
+      - name: List downloaded files
+        run: |
+          echo "Files in current directory:"
+          ls -la
+          echo "Looking for zip files:"
+          ls -la *.zip || echo "No zip files found"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -96,6 +103,10 @@ jobs:
 
       - name: Publish Lambda Layer
         run: |
+          # Find the actual zip file (should be the only one)
+          ZIP_FILE=$(ls *.zip | head -1)
+          echo "Using zip file: $ZIP_FILE"
+          
           LAYER_ARN=$(
             aws lambda publish-layer-version \
               --layer-name $LAYER_NAME \
@@ -103,7 +114,7 @@ jobs:
               --license-info "Apache 2.0" \
               --compatible-architectures $ARCH \
               $COMPATIBLE_RUNTIMES \
-              --zip-file fileb://${{ inputs.artifact-name }} \
+              --zip-file fileb://$ZIP_FILE \
               --query 'LayerVersionArn' \
               --output text
           )
