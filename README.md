@@ -207,10 +207,15 @@ All clean targets include confirmation prompts for safety.
   - Specify exporter version (default: latest)
   - Select AWS regions (individual region or all 13 regions)
   - Set release group (free text, default: beta)
-  - Set upstream branch/tag (e.g., main, v0.14.0, layer-python/0.14.0)
+  - Set upstream branch/tag with smart handling:
+    - `v0.14.0` → Auto-constructs `layer-python/0.14.0` or `layer-nodejs/0.14.0`
+    - `layer-python/0.14.0` → Uses exactly as specified (with validation)
+    - `main`, branches, commits → Uses as-is for development builds
 - **Features**:
-  - Automatic GitHub release creation for upstream tags
-  - Layer ARN documentation in release notes
+  - Smart tag construction from semantic versions (reduces typos)
+  - Automatic GitHub release creation for version tags
+  - Real layer ARN documentation in release notes
+  - Input validation to prevent language/tag mismatches
 
 ### Utility Workflows
 
@@ -259,7 +264,57 @@ All clean targets include confirmation prompts for safety.
    - Exporter version: Specify version or use "latest"
    - AWS regions: Select specific regions or "all" (13 regions)
    - Release group: Enter custom name (default: "beta") - affects layer naming
-   - Upstream branch: Usually "main" or specific tag like "v0.14.0"
+   - Upstream branch: See options below
+
+### Upstream Branch Options
+
+The manual workflow supports several upstream branch/tag formats:
+
+#### **Semantic Versions (Recommended for Releases)**
+- **Input**: `v0.14.0`
+- **Result**: Auto-constructs language-specific tags
+  - Python: `layer-python/0.14.0`
+  - Node.js: `layer-nodejs/0.14.0`
+- **Creates Release**: Yes, with tag matching the constructed language-specific tag
+- **Benefits**: Reduces typos, same input works for both languages
+
+#### **Language-Specific Tags**
+- **Input**: `layer-python/0.14.0` or `layer-nodejs/0.14.0`
+- **Result**: Uses tag exactly as specified
+- **Creates Release**: Yes, with the same tag
+- **Validation**: Must match selected language (prevents mismatches)
+
+#### **Generic References**
+- **Input**: `main`, `feature-branch`, commit hash
+- **Result**: Uses reference as-is for building
+- **Creates Release**: No
+- **Use Case**: Development, testing, custom builds
+
+### Examples
+
+**Release Python layer v0.14.0:**
+```
+Language: python
+Upstream branch: v0.14.0  ← Simple and typo-free!
+Release group: prod
+```
+Creates GitHub release with tag `layer-python/0.14.0`
+
+**Release Node.js layer v0.14.0:**
+```
+Language: nodejs
+Upstream branch: v0.14.0  ← Same input, different language
+Release group: prod
+```
+Creates GitHub release with tag `layer-nodejs/0.14.0`
+
+**Development build:**
+```
+Language: python
+Upstream branch: main
+Release group: dev
+```
+No GitHub release created
 
 ### Required Secrets
 

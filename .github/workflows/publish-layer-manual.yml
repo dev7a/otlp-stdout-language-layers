@@ -42,7 +42,7 @@ on:
         type: string
         default: beta
       upstream-branch:
-        description: 'Upstream OpenTelemetry Lambda branch or tag to build from (e.g., main, v0.14.0)'
+        description: 'Upstream OpenTelemetry Lambda branch or tag to build from (e.g., main, v0.14.0, layer-python/0.14.0). Use v0.14.0 to auto-construct language-specific tags.'
         required: false
         type: string
         default: main
@@ -122,6 +122,11 @@ jobs:
             exit 1
           fi
           
+          # v-prefixed versions are valid for any language (we'll construct the right tag)
+          if [[ "$UPSTREAM" == v* ]]; then
+            echo "✅ Will construct language-specific tag from '$UPSTREAM' for '$LANGUAGE'"
+          fi
+          
           echo "✅ Validation passed: upstream tag and language are compatible"
 
       - name: Save versions
@@ -140,21 +145,60 @@ jobs:
       - name: Save Upstream Version
         id: save-upstream-version
         run: |
-          echo "UPSTREAM_VERSION=${{ steps.save-versions.outputs.UPSTREAM_VERSION }}" >> $GITHUB_OUTPUT
+          UPSTREAM="${{ steps.save-versions.outputs.UPSTREAM_VERSION }}"
+          LANGUAGE="${{ matrix.language }}"
+          
+          # If upstream starts with 'v', construct language-specific tag for consistency
+          if [[ "$UPSTREAM" == v* ]]; then
+            VERSION=${UPSTREAM#v}
+            UPSTREAM_VERSION="layer-$LANGUAGE/$VERSION"
+            echo "Constructed upstream version: $UPSTREAM_VERSION"
+          else
+            UPSTREAM_VERSION="$UPSTREAM"
+            echo "Using upstream version as-is: $UPSTREAM_VERSION"
+          fi
+          
+          echo "UPSTREAM_VERSION=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
 
       - name: Build Python Layer
         if: matrix.language == 'python'
-        run: make build-python-layer
-        env:
-          UPSTREAM_BRANCH: ${{ github.event.inputs.upstream-branch }}
-          EXPORTER_VERSION: ${{ github.event.inputs.exporter-version }}
+        run: |
+          UPSTREAM="${{ github.event.inputs.upstream-branch }}"
+          
+          # If upstream starts with 'v', construct language-specific tag
+          if [[ "$UPSTREAM" == v* ]]; then
+            VERSION=${UPSTREAM#v}
+            UPSTREAM_TAG="layer-python/$VERSION"
+            echo "Constructing Python-specific tag: $UPSTREAM_TAG"
+          else
+            UPSTREAM_TAG="$UPSTREAM"
+            echo "Using upstream tag as-is: $UPSTREAM_TAG"
+          fi
+          
+          export UPSTREAM_BRANCH="$UPSTREAM_TAG"
+          export EXPORTER_VERSION="${{ github.event.inputs.exporter-version }}"
+          
+          make build-python-layer
 
       - name: Build Node.js Layer
         if: matrix.language == 'nodejs'
-        run: make build-node-layer
-        env:
-          UPSTREAM_BRANCH: ${{ github.event.inputs.upstream-branch }}
-          EXPORTER_VERSION: ${{ github.event.inputs.exporter-version }}
+        run: |
+          UPSTREAM="${{ github.event.inputs.upstream-branch }}"
+          
+          # If upstream starts with 'v', construct language-specific tag
+          if [[ "$UPSTREAM" == v* ]]; then
+            VERSION=${UPSTREAM#v}
+            UPSTREAM_TAG="layer-nodejs/$VERSION"
+            echo "Constructing Node.js-specific tag: $UPSTREAM_TAG"
+          else
+            UPSTREAM_TAG="$UPSTREAM"
+            echo "Using upstream tag as-is: $UPSTREAM_TAG"
+          fi
+          
+          export UPSTREAM_BRANCH="$UPSTREAM_TAG"
+          export EXPORTER_VERSION="${{ github.event.inputs.exporter-version }}"
+          
+          make build-node-layer
 
       - name: Upload Python Layer Artifact
         if: matrix.language == 'python'
@@ -171,7 +215,7 @@ jobs:
           path: dist/otlp-stdout-node-*.zip
 
   publish-python-layer:
-    if: github.event.inputs.language == 'python'
+    if: always() && github.event.inputs.language == 'python' && needs.build-layers.result == 'success'
     uses: ./.github/workflows/layer-publish.yml
     needs: [prepare-build-jobs, build-layers]
     strategy:
@@ -187,7 +231,7 @@ jobs:
     secrets: inherit
 
   publish-nodejs-layer:
-    if: github.event.inputs.language == 'nodejs'
+    if: always() && github.event.inputs.language == 'nodejs' && needs.build-layers.result == 'success'
     uses: ./.github/workflows/layer-publish.yml
     needs: [prepare-build-jobs, build-layers]
     strategy:
