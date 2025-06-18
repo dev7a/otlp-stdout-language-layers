@@ -35,7 +35,7 @@ on:
           - us-east-1
           - us-east-2
           - us-west-2
-        default: us-east-1
+        default: all
       release-group:
         description: 'Release group name (e.g., beta, dev, prod, alpha)'
         required: true
@@ -347,11 +347,15 @@ jobs:
               --query 'LayerVersions[0].Version' \
               --output text 2>/dev/null || echo "1")
             
+            # Create badge-style region name with doubled dashes
+            REGION_BADGE_NAME=$(echo "$region" | sed 's/-/--/g')
+            REGION_BADGE="![${region}](https://img.shields.io/badge/${REGION_BADGE_NAME}-eee?style=for-the-badge)"
+            
             if [[ "$LAYER_VERSION" != "None" && "$LAYER_VERSION" != "" ]]; then
               LAYER_ARN="arn:aws:lambda:$region:$ACCOUNT_ID:layer:$LAYER_NAME:$LAYER_VERSION"
-              echo "| $region | \`$LAYER_ARN\` |" >> release_notes.md
+              echo "| $REGION_BADGE | \`$LAYER_ARN\` |" >> release_notes.md
             else
-              echo "| $region | ❌ Layer not found or failed to publish |" >> release_notes.md
+              echo "| $REGION_BADGE | ❌ Layer not found or failed to publish |" >> release_notes.md
             fi
           done
           

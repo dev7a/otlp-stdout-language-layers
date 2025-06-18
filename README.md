@@ -56,25 +56,30 @@ Prerequisites: Node.js, Python 3, and GNU Make.
 make build
 ```
 
-## Publishing to AWS
+## Local Development Publishing
 Prerequisites: AWS CLI configured with appropriate permissions.
 
+For local development and testing, you can publish layers to your AWS account using the Makefile:
+
 ```bash
-# Publish individual layers
+# Publish individual layers (for local development)
 make publish-python-layer
 make publish-node-layer
 
-# Publish both layers
+# Publish both layers (for local development)
 make publish
 
-# Show current layer ARNs
+# Show current local layer ARNs
 make show-arns
 ```
 
-The publish targets will:
+The local publish targets will:
 - Build the full layers from upstream source
-- Upload them to your AWS account in the configured region
+- Upload them to your AWS account in the configured region with `local-` prefix
 - Output the resulting layer ARNs
+
+> [!NOTE]  
+> These Makefile targets are intended for **local development only**. For production releases, use the **Manual Layer Publish** workflow in GitHub Actions which provides multi-region publishing, release group management, and proper versioning.
 
 ---
 ## Using the layers
