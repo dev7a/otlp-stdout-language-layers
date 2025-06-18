@@ -3,6 +3,7 @@
 This repository provides AWS Lambda layers that enhance the standard [OpenTelemetry (OTEL) layers](https://github.com/open-telemetry/opentelemetry-lambda) by adding a **OTLP over stdout** transport method for the traces signal, unlocking significant performance and operational benefits.
 
 This is done by injecting the OTLP Stdout Span Exporter in the default telemetry pipeline. This exporter is a lightweight, efficient span exporter that writes OTLP spans to stdout as a protobuf gzip compressed JSON record. The packages for the exporter and the documentation are available on mpm and pypi if you want to use them in your own projects:
+
 [![npm](https://img.shields.io/npm/v/%40dev7a%2Fotlp-stdout-span-exporter?style=for-the-badge)](https://www.npmjs.com/package/@dev7a/otlp-stdout-span-exporter)  [![PyPI](https://img.shields.io/pypi/v/otlp-stdout-span-exporter?style=for-the-badge)](https://pypi.org/project/otlp-stdout-span-exporter/)
 
 > [!NOTE]
@@ -16,7 +17,7 @@ In modern serverless architectures, sending observability data via traditional n
 The `otlp-stdout-span-exporter` simplifies this by treating telemetry as a logging concern. Instead of pushing data from the function, it writes compressed OTLP spans to `stdout` (or to a named pipe for use with extensions). This stream is automatically captured by the Lambda runtime and sent to CloudWatch Logs. From there, a otlp-forwarding pipeline can parse the OTLP data and send it to any observability backend.
 
 > [!NOTE]
-> Currently we are supporting only the traces signal, other signals (logs and metrics) will still be using the standard OTLP over http or gRPC methods. If you are using these signals, you should use the standard OTEL layers.
+> Currently only the traces signal is supported, other signals (logs and metrics) will still be using the standard OTLP over http or gRPC methods. If you are using these signals, you should use the standard OTEL layers.
 
 
 ## Key Benefits
