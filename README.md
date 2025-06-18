@@ -9,7 +9,6 @@ This is done by injecting the OTLP Stdout Span Exporter in the default telemetry
 > [!NOTE]
 > This project is a work in progress and is subject to change. Use at your own risk.
 
----
 ## Motivation
 
 In modern serverless architectures, sending observability data via traditional network exporters (like OTLP over HTTP or gRPC) can introduce unnecessary overhead. Every millisecond counts, and network operations are a common source of latency and configuration complexity.
@@ -32,15 +31,12 @@ Using this _"OTLP over stdout"_ approach provides several key advantages over tr
 
 - **Cost-Effective**: Reducing cold starts and latency can reduce costs by reducing the number of concurrent function executions and billed duration.
 
----
 ## How It Works
 
 This project builds and packages **full, self-contained Lambda layers** with the `otlp-stdout-span-exporter` pacakge already integrated. This makes them a simple, drop-in replacement for the standard upstream OpenTelemetry layers.
 
 The build process clones the official [opentelemetry-lambda](https://github.com/open-telemetry/opentelemetry-lambda) repository, patches a couple of files to inject the exporter, and packages everything into a ready-to-use layer.
 
-
----
 ## Build-time configuration
 All configuration is passed as environment variables when you invoke `make`.
 
@@ -51,7 +47,6 @@ All configuration is passed as environment variables when you invoke `make`.
 | `UPSTREAM_BRANCH` | `main` | Branch/tag to build from. |
 | `EXPORTER_VERSION` | `latest` | Version of otlp-stdout-span-exporter to include. |
 
----
 ## Building
 
 Prerequisites: Node.js, Python 3, and GNU Make.
@@ -98,7 +93,7 @@ The publish targets will:
 > **Future configuration for the python layer (post v0.14.0):**
 > Following the OpenTelemetry community's standardization effort ([Issue #1788](https://github.com/open-telemetry/opentelemetry-lambda/issues/1788), [PR #1837](https://github.com/open-telemetry/opentelemetry-lambda/pull/1837)), all languages will standardize on `/opt/otel-handler`:so, fot **all languages** you should use `AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-handler`
 
----
+
 ## Example layer configuration
 
 **Python Lambda:**
@@ -120,8 +115,6 @@ Environment:
     AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-handler
     OTEL_TRACES_EXPORTER: otlpstdout
 ```
-
----
 
 ## Development
 
@@ -153,36 +146,7 @@ All clean targets include confirmation prompts for safety.
   - Build full Node.js layer from upstream source
   - Verify layer contents
 
-#### `ci-makefile.yml`
-- **Triggers**: Push/PR to `main` when Makefile or shell scripts change
-- **Purpose**: Validate Makefile syntax and shell script quality
-- **Jobs**:
-  - Run shellcheck on all shell scripts
-  - Validate Makefile syntax and targets
-
-### Release Workflows
-
-#### `release-layer-python.yml`
-- **Triggers**: Tag push matching `layer-python/**`
-- **Purpose**: Build and publish Python layers to AWS Lambda in all regions
-- **Jobs**:
-  - Create GitHub release
-  - Build Python layer with latest exporter version from upstream tag
-  - Publish to 13 AWS regions (Canada, Europe, US)
-  - Upload artifacts to GitHub release
-  - Finalize GitHub release with layer ARNs and usage instructions
-
-#### `release-layer-nodejs.yml`
-- **Triggers**: Tag push matching `layer-nodejs/**`
-- **Purpose**: Build and publish Node.js layers to AWS Lambda in all regions
-- **Jobs**:
-  - Create GitHub release
-  - Build Node.js layer with latest exporter version from upstream tag
-  - Publish to 13 AWS regions (Canada, Europe, US)
-  - Upload artifacts to GitHub release
-  - Finalize GitHub release with layer ARNs and usage instructions
-
-### Manual Workflows
+### Manual Publishing Workflow
 
 #### `publish-layer-manual.yml`
 - **Triggers**: Manual dispatch from GitHub UI
@@ -216,28 +180,7 @@ All clean targets include confirmation prompts for safety.
 
 ## Usage Instructions
 
-### Creating a Release
-
-1. **Tag the release**: Create and push a tag following the pattern:
-   ```bash
-   # For Python layer
-   git tag layer-python/1.2.3
-   git push origin layer-python/1.2.3
-   
-   # For Node.js layer
-   git tag layer-nodejs/1.2.3
-   git push origin layer-nodejs/1.2.3
-   ```
-
-2. **Monitor the workflow**: The release workflow will automatically:
-   - Create a draft GitHub release
-   - Build the layer with the specified exporter version
-   - Publish to all AWS regions
-   - Upload artifacts to the release
-
-3. **Finalize the release**: Edit and publish the draft release on GitHub
-
-### Manual Publishing
+### Publishing Layers
 
 1. Go to **Actions** → **Manual Layer Publish** in the GitHub UI
 2. Click **Run workflow**
@@ -274,7 +217,7 @@ The manual workflow supports several upstream branch/tag formats:
 
 ### Examples
 
-**Release Python layer v0.14.0:**
+**Production Release - Python layer v0.14.0:**
 ```
 Language: python
 Upstream branch: v0.14.0  ← Simple and typo-free!
@@ -282,13 +225,21 @@ Release group: prod
 ```
 Creates GitHub release with tag `layer-python/0.14.0`
 
-**Release Node.js layer v0.14.0:**
+**Production Release - Node.js layer v0.14.0:**
 ```
 Language: nodejs
 Upstream branch: v0.14.0  ← Same input, different language
 Release group: prod
 ```
 Creates GitHub release with tag `layer-nodejs/0.14.0`
+
+**Beta Release:**
+```
+Language: python
+Upstream branch: v0.14.0
+Release group: beta
+```
+Creates GitHub release with tag `layer-python/0.14.0-beta`
 
 **Development build:**
 ```

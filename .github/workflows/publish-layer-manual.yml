@@ -328,6 +328,10 @@ jobs:
           
           echo "Layer name: $LAYER_NAME"
           
+          # Create table header
+          echo "| Region | Layer ARN |" >> release_notes.md
+          echo "|--------|-----------|" >> release_notes.md
+          
           # Get the list of regions where the layer was published
           regions_json='${{ needs.prepare-build-jobs.outputs.regions }}'
           regions=($(echo "$regions_json" | jq -r '.aws_region[]'))
@@ -345,9 +349,9 @@ jobs:
             
             if [[ "$LAYER_VERSION" != "None" && "$LAYER_VERSION" != "" ]]; then
               LAYER_ARN="arn:aws:lambda:$region:$ACCOUNT_ID:layer:$LAYER_NAME:$LAYER_VERSION"
-              echo "- **$region**: \`$LAYER_ARN\`" >> release_notes.md
+              echo "| $region | \`$LAYER_ARN\` |" >> release_notes.md
             else
-              echo "- **$region**: Layer not found or failed to publish" >> release_notes.md
+              echo "| $region | ❌ Layer not found or failed to publish |" >> release_notes.md
             fi
           done
           
