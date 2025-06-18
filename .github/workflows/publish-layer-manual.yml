@@ -265,21 +265,35 @@ jobs:
         run: |
           UPSTREAM="${{ github.event.inputs.upstream-branch }}"
           LANGUAGE="${{ github.event.inputs.language }}"
+          RELEASE_GROUP="${{ github.event.inputs.release-group }}"
           
           if [[ "$UPSTREAM" == layer-* ]]; then
-            # Use upstream tag as-is if it already has layer- prefix
-            RELEASE_TAG="$UPSTREAM"
+            # Extract version from existing layer tag (e.g., layer-python/0.14.0 -> 0.14.0)
+            if [[ "$UPSTREAM" == layer-$LANGUAGE/* ]]; then
+              VERSION=$(echo "$UPSTREAM" | sed -E "s|^layer-$LANGUAGE/||")
+            else
+              echo "::error::Upstream tag '$UPSTREAM' doesn't match language '$LANGUAGE'"
+              exit 1
+            fi
+            BASE_TAG="layer-$LANGUAGE/$VERSION"
           elif [[ "$UPSTREAM" == v* ]]; then
             # Convert v0.14.0 to layer-python/0.14.0 or layer-nodejs/0.14.0
             VERSION=${UPSTREAM#v}
-            RELEASE_TAG="layer-$LANGUAGE/$VERSION"
+            BASE_TAG="layer-$LANGUAGE/$VERSION"
           else
             echo "::error::Upstream branch '$UPSTREAM' doesn't look like a release tag"
             exit 1
           fi
           
+          # Append release group to the tag unless it's 'prod' (production releases get clean tags)
+          if [[ "$RELEASE_GROUP" == "prod" ]]; then
+            RELEASE_TAG="$BASE_TAG"
+          else
+            RELEASE_TAG="$BASE_TAG-$RELEASE_GROUP"
+          fi
+          
           echo "release-tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
-          echo "Release tag will be: $RELEASE_TAG"
+          echo "Release tag will be: $RELEASE_TAG (upstream: $UPSTREAM, release-group: $RELEASE_GROUP)"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
