@@ -21,12 +21,12 @@ index ecbd5b0..a3bb202 100644
    ]);
    const exporters: SpanExporter[] = [];
 +  const exporterNames: string[] = [];
-+  
++
 +  // Allow downstream to extend the exporter map
 +  if (typeof configureExporterMap === 'function') {
 +    configureExporterMap(stringToExporter);
 +  }
-+  
++
    process.env.OTEL_TRACES_EXPORTER.split(',').map(exporterName => {
      exporterName = exporterName.toLowerCase().trim();
 +    exporterNames.push(exporterName);
@@ -37,12 +37,12 @@ index ecbd5b0..a3bb202 100644
        );
      }
    });
-+  
++
 +  // Allow downstream to configure exporters (for backward compatibility)
 +  if (typeof configureExporters === 'function') {
 +    return configureExporters(exporters, exporterNames);
 +  }
-+  
++
    return exporters;
  }
  

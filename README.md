@@ -1,11 +1,8 @@
 # OTLP/STDOUT Language Layers
 
-This repository provides AWS Lambda layers that enhance the standard [OpenTelemetry (OTEL) layers](https://github.com/open-telemetry/opentelemetry-lambda) by adding a efficient transport method for your telemetry data: **OTLP over stdout**.
+This repository provides AWS Lambda layers that enhance the standard [OpenTelemetry (OTEL) layers](https://github.com/open-telemetry/opentelemetry-lambda) by adding a **OTLP over stdout** transport method for the traces signal, unlocking significant performance and operational benefits.
 
-By using these layers, you can configure your Lambda functions to export traces directly to standard output, unlocking significant performance and operational benefits.
-
-The OTLP Stdout Span Exporter is a lightweight, efficient span exporter that writes OTLP spans to stdout. It is designed to be used in AWS Lambda functions and is a great way to get started with OpenTelemetry. The packages are available on [NPM](https://www.npmjs.com/package/@dev7a/otlp-stdout-span-exporter) and [PyPI](https://pypi.org/project/otlp-stdout-span-exporter/) and [if you want to use them in your own projects:
-
+This is done by injecting the OTLP Stdout Span Exporter in the default telemetry pipeline. This exporter is a lightweight, efficient span exporter that writes OTLP spans to stdout as a protobuf gzip compressed JSON record. The packages for the exporter and the documentation are available on mpm and pypi if you want to use them in your own projects:
 [![npm](https://img.shields.io/npm/v/%40dev7a%2Fotlp-stdout-span-exporter?style=for-the-badge)](https://www.npmjs.com/package/@dev7a/otlp-stdout-span-exporter)  [![PyPI](https://img.shields.io/pypi/v/otlp-stdout-span-exporter?style=for-the-badge)](https://pypi.org/project/otlp-stdout-span-exporter/)
 
 > [!NOTE]
@@ -16,16 +13,15 @@ The OTLP Stdout Span Exporter is a lightweight, efficient span exporter that wri
 
 In modern serverless architectures, sending observability data via traditional network exporters (like OTLP over HTTP or gRPC) can introduce unnecessary overhead. Every millisecond counts, and network operations are a common source of latency and configuration complexity.
 
-The `otlp-stdout` approach simplifies this by treating telemetry as a logging concern. Instead of pushing data from the function, it writes compressed OTLP spans to `stdout`. This stream is automatically captured by the Lambda runtime and sent to CloudWatch Logs. From there, a log-forwarding pipeline can parse the OTLP data and send it to any observability backend, turning your logging pipeline into a robust and efficient telemetry pipeline.
+The `otlp-stdout-span-exporter` simplifies this by treating telemetry as a logging concern. Instead of pushing data from the function, it writes compressed OTLP spans to `stdout` (or to a named pipe for use with extensions). This stream is automatically captured by the Lambda runtime and sent to CloudWatch Logs. From there, a otlp-forwarding pipeline can parse the OTLP data and send it to any observability backend.
 
 > [!NOTE]
 > Currently we are supporting only the traces signal, other signals (logs and metrics) will still be using the standard OTLP over http or gRPC methods. If you are using these signals, you should use the standard OTEL layers.
 
 
-
 ## Key Benefits
 
-Using `otlp-stdout` provides several key advantages over traditional network-based exporters:
+Using this _"OTLP over stdout"_ approach provides several key advantages over traditional network-based exporters:
 
 - **Reduced Cold Start & Latency**: By eliminating the need for the Lambda function to establish a network connection to a collector, we remove network setup overhead from the critical path. This reduces both cold start times and per-invocation latency, as writing to stdout is significantly faster than a network round-trip.
 
@@ -38,24 +34,10 @@ Using `otlp-stdout` provides several key advantages over traditional network-bas
 ---
 ## How It Works
 
-This project builds and packages **full, self-contained Lambda layers** with the `otlp-stdout` exporter already integrated. This makes them a simple, drop-in replacement for the standard upstream OpenTelemetry layers.
+This project builds and packages **full, self-contained Lambda layers** with the `otlp-stdout-span-exporter` pacakge already integrated. This makes them a simple, drop-in replacement for the standard upstream OpenTelemetry layers.
 
-Our build process clones the official [opentelemetry-lambda](https://github.com/open-telemetry/opentelemetry-lambda) repository, injects the `otlp-stdout` exporter, and packages everything into a ready-to-use layer. This is the recommended approach for both Python and Node.js as it guarantees compatibility.
+The build process clones the official [opentelemetry-lambda](https://github.com/open-telemetry/opentelemetry-lambda) repository, patches a couple of files to inject the exporter, and packages everything into a ready-to-use layer.
 
----
-## Repository layout
-```
-otlp-stdout-language-layers/
-├── Makefile                     # build targets for both approaches
-├── python/
-│   └── Dockerfile               # overlay layer build (future use)
-├── nodejs/
-│   ├── Dockerfile               # overlay layer build (future use)
-│   ├── patch-full-layer.mjs     # configureExporterMap implementation
-│   ├── wrapper-override.patch   # upstream extensibility patch
-│   └── otel-handler             # custom handler script
-└── dist/                        # build artifacts appear here
-```
 
 ---
 ## Build-time configuration
@@ -67,8 +49,6 @@ All configuration is passed as environment variables when you invoke `make`.
 | `UPSTREAM_REPO` | `https://github.com/open-telemetry/opentelemetry-lambda.git` | Upstream repository to clone for full builds. |
 | `UPSTREAM_BRANCH` | `main` | Branch/tag to build from. |
 | `EXPORTER_VERSION` | `latest` | Version of otlp-stdout-span-exporter to include. |
-| `PY_BASE_LAYER_ARN` | `arn:aws:lambda:${AWS_REGION}:184161586896:layer:opentelemetry-python-0_14_0:1` | For overlay builds (future). |
-| `NODE_BASE_LAYER_ARN` | `arn:aws:lambda:${AWS_REGION}:184161586896:layer:opentelemetry-nodejs-0_14_0:1` | For overlay builds (future). |
 
 ---
 ## Building
@@ -120,7 +100,7 @@ The publish targets will:
 ---
 ## Example layer configuration
 
-**Python Lambda (Full Layer):**
+**Python Lambda:**
 ```yaml
 Layers:
   - arn:aws:lambda:us-east-1:961341555982:layer:otlp-stdout-python-main:2
@@ -130,7 +110,7 @@ Environment:
     OTEL_TRACES_EXPORTER: otlpstdout
 ```
 
-**Node.js Lambda (Full Layer):**
+**Node.js Lambda:**
 ```yaml
 Layers:
   - arn:aws:lambda:us-east-1:961341555982:layer:otlp-stdout-node-main:5
@@ -142,14 +122,6 @@ Environment:
 
 ---
 
-### Future Direction: Overlay Layers
-
-An alternative approach to rebuilding the full layers could be to use a thin "overlay" layer that only contains the `otlp-stdout` exporter and injects it into the standard, unmodified upstream OTEL layer.
-
-- **Python**: This already works due to Python's native entry point discovery system. You can build and use this via the `make build-python-layer-overlay` target.
-- **Node.js**: This is not yet possible because the upstream Node.js layer is a bundled webpack artifact that does not support dynamic module loading. The extensibility enhancements included in this project (see "Upstream Contribution") are a step toward making this a reality.
-
----
 ## Development
 
 ### Clean up build artifacts
@@ -163,7 +135,6 @@ All clean targets include confirmation prompts for safety.
 
 
 ## CI/CD Workflows for OTLP Stdout Language Layers
-
 
 ### Continuous Integration (CI)
 
@@ -240,9 +211,6 @@ All clean targets include confirmation prompts for safety.
   - Multi-region publishing
   - Public layer permissions
   - Version tracking
-
-
-
 
 
 ## Usage Instructions
@@ -358,4 +326,4 @@ All workflows provide detailed logging and will create GitHub annotations for im
 
 ---
 ## License
-Apache-2.0, same as the upstream OpenTelemetry projects.
+MIT

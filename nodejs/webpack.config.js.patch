@@ -1,0 +1,13 @@
+diff --git a/nodejs/packages/layer/webpack.config.js b/nodejs/packages/layer/webpack.config.js
+index ebdff0b..b255e76 100644
+--- a/nodejs/packages/layer/webpack.config.js
++++ b/nodejs/packages/layer/webpack.config.js
+@@ -1,7 +1,7 @@
+ const path = require('path');
+ 
+ module.exports = {
+-  entry: './src/wrapper.ts',
++  entry: ['/src/load-stdout-exporter.mjs', './src/wrapper.ts'],
+   target: 'node',
+   mode: 'production',
+   externalsPresets: { node: true }, // in order to ignore built-in modules like path, fs, etc.

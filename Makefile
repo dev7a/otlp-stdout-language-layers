@@ -1,6 +1,5 @@
 # Build layers that add the otlp-stdout-span-exporter:
 # - Full layers: Clone upstream and modify to add OTLP stdout support
-# - Overlay layers: Thin layers that extend existing upstream layers
 
 AWS_REGION            ?= us-east-1
 
@@ -8,16 +7,9 @@ AWS_REGION            ?= us-east-1
 UPSTREAM_REPO         ?= https://github.com/open-telemetry/opentelemetry-lambda.git
 UPSTREAM_BRANCH       ?= main
 
-# Upstream instrumentation layer ARNs (used for overlay layers)
-PY_BASE_LAYER_ARN     ?= arn:aws:lambda:$(AWS_REGION):184161586896:layer:opentelemetry-python-0_14_0:1
-NODE_BASE_LAYER_ARN   ?= arn:aws:lambda:$(AWS_REGION):184161586896:layer:opentelemetry-nodejs-0_14_0:1
 
 # Version of the exporter package to embed. "latest" keeps us current.
 EXPORTER_VERSION      ?= latest
-
-# Extract the version fragment (e.g. 0_14_0) from each ARN for naming overlay layers.
-PY_UPSTREAM_VERSION   := $(shell echo $(PY_BASE_LAYER_ARN)   | sed -E 's/.*python-([^:]*):.*/\1/')
-NODE_UPSTREAM_VERSION := $(shell echo $(NODE_BASE_LAYER_ARN) | sed -E 's/.*nodejs-([^:]*):.*/\1/')
 
 # For full layers, use branch name as version
 UPSTREAM_VERSION      := $(shell echo $(UPSTREAM_BRANCH) | tr '/' '_')
@@ -82,43 +74,27 @@ build-node-layer: clone-upstream ## Build the Node.js full layer from source
 	@mkdir -p $(DIST_DIR)
 	# Apply our patch to add configureExporters support
 	@cd $(CLONE_DIR) && git apply --ignore-whitespace $(PWD)/nodejs/wrapper-override.patch
+	@cp $(PWD)/nodejs/load-stdout-exporter.mjs $(CLONE_DIR)/nodejs/packages/layer/src/load-stdout-exporter.mjs
+	# Add our exporter as a dev dependency so webpack can find it for bundling
+	@echo "--> Adding OTLP stdout exporter as a dev dependency..."
+	@cd $(CLONE_DIR)/nodejs && npm install @dev7a/otlp-stdout-span-exporter@$(EXPORTER_VERSION) --save
 	# Install root dev dependencies (includes rimraf, etc.)
 	@cd $(CLONE_DIR)/nodejs && npm install
-	# Add our exporter to package.json dependencies
-	@cd $(CLONE_DIR)/nodejs/packages/layer && npm install @dev7a/otlp-stdout-span-exporter$(if $(filter-out latest,$(EXPORTER_VERSION)),@$(EXPORTER_VERSION))
-	# Copy our patch and otel-handler override
-	@cp $(PWD)/nodejs/patch-full-layer.mjs $(CLONE_DIR)/nodejs/packages/layer/src/patch-full-layer.mjs
-	@cp $(PWD)/nodejs/otel-handler $(CLONE_DIR)/nodejs/packages/layer/scripts/otel-handler
-	# Build the layer (but not package yet)
-	@cd $(CLONE_DIR)/nodejs/packages/layer && npm run clean && npm run compile && npm run install-externals
-	# Install our exporter package in the build workspace
-	@cd $(CLONE_DIR)/nodejs/packages/layer/build/workspace && npm install @dev7a/otlp-stdout-span-exporter$(if $(filter-out latest,$(EXPORTER_VERSION)),@$(EXPORTER_VERSION)) --production
-	# Now package the layer with our exporter included
-	@cd $(CLONE_DIR)/nodejs/packages/layer && npm run package
+	# Modify webpack.config.js to include our patch as a second entry point and add our node_modules to the resolution path
+	@echo "--> Modifying webpack config to add custom entry point..."
+	@cd $(CLONE_DIR) && git apply --ignore-whitespace $(PWD)/nodejs/webpack.config.js.patch
+	# Build the layer using npm build script, which will now bundle our exporter
+	@echo "--> Running upstream build..."
+	@cd $(CLONE_DIR)/nodejs/packages/layer && npm run build
 	# Copy the built layer
+	@echo "--> Copying final artifact..."
 	@cp $(CLONE_DIR)/nodejs/packages/layer/build/layer.zip $(DIST_DIR)/otlp-stdout-node-$(UPSTREAM_VERSION).zip
 
-# Overlay layer builds (original approach)
-build-python-layer-overlay: ## Build the Python overlay layer (requires Docker)
-	@echo "Building Python overlay layer (upstream $(PY_UPSTREAM_VERSION)) …"
-	@mkdir -p $(DIST_DIR)
-	docker build -f python/Dockerfile \
-	    --build-arg EXPORTER_VERSION=$(EXPORTER_VERSION) \
-	    --output type=local,dest=$(DIST_DIR) .
-	mv $(DIST_DIR)/layer.zip $(DIST_DIR)/otlp-stdout-python-overlay-$(PY_UPSTREAM_VERSION).zip
-
-build-node-layer-overlay: ## Build the Node.js overlay layer (requires Docker, not yet functional)
-	@echo "Building Node overlay layer (upstream $(NODE_UPSTREAM_VERSION)) …"
-	@mkdir -p $(DIST_DIR)
-	docker build -f nodejs/Dockerfile \
-	    --build-arg EXPORTER_VERSION=$(EXPORTER_VERSION) \
-	    --output type=local,dest=$(DIST_DIR) .
-	mv $(DIST_DIR)/layer.zip $(DIST_DIR)/otlp-stdout-node-overlay-$(NODE_UPSTREAM_VERSION).zip
 
 publish-python-layer: build-python-layer ## Build and publish the Python full layer to AWS
 	@echo "Publishing Python full layer to AWS account in $(AWS_REGION) …"
 	@LAYER_ARN=$$(aws lambda publish-layer-version \
-	    --layer-name "otlp-stdout-python-$(UPSTREAM_VERSION)" \
+	    --layer-name "otlp-stdout-python-$(shell echo $(UPSTREAM_VERSION) | tr '.' '_')" \
 	    --description "OTLP Stdout exporter for OpenTelemetry Python ($(UPSTREAM_VERSION))" \
 	    --zip-file fileb://$(DIST_DIR)/otlp-stdout-python-$(UPSTREAM_VERSION).zip \
 	    --compatible-runtimes python3.8 python3.9 python3.10 python3.11 python3.12 python3.13 \
@@ -129,7 +105,7 @@ publish-python-layer: build-python-layer ## Build and publish the Python full la
 publish-node-layer: build-node-layer ## Build and publish the Node.js full layer to AWS
 	@echo "Publishing Node full layer to AWS account in $(AWS_REGION) …"
 	@LAYER_ARN=$$(aws lambda publish-layer-version \
-	    --layer-name "otlp-stdout-node-$(UPSTREAM_VERSION)" \
+	    --layer-name "otlp-stdout-node-$(shell echo $(UPSTREAM_VERSION) | tr '.' '_')" \
 	    --description "OTLP Stdout exporter for OpenTelemetry Node.js ($(UPSTREAM_VERSION))" \
 	    --zip-file fileb://$(DIST_DIR)/otlp-stdout-node-$(UPSTREAM_VERSION).zip \
 	    --compatible-runtimes nodejs18.x nodejs20.x nodejs22.x \
