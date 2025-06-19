@@ -1,0 +1,15 @@
+diff --git a/nodejs/packages/layer/src/wrapper.ts b/nodejs/packages/layer/src/wrapper.ts
+index ecbd5b0..e4a000f 100644
+--- a/nodejs/packages/layer/src/wrapper.ts
++++ b/nodejs/packages/layer/src/wrapper.ts
+@@ -369,6 +369,10 @@ function getExportersFromEnv(): SpanExporter[] | null {
+   const stringToExporter = new Map<string, () => SpanExporter>([
+     ['otlp', () => new OTLPTraceExporter()],
+     ['console', () => new ConsoleSpanExporter()],
++    ['otlpstdout', () => {
++      const { OTLPStdoutSpanExporter } = require('@dev7a/otlp-stdout-span-exporter');
++      return new OTLPStdoutSpanExporter();
++    }],
+   ]);
+   const exporters: SpanExporter[] = [];
+   process.env.OTEL_TRACES_EXPORTER.split(',').map(exporterName => {

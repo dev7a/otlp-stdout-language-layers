@@ -1,0 +1,20 @@
+diff --git a/nodejs/packages/layer/src/wrapper.ts b/nodejs/packages/layer/src/wrapper.ts
+index ecbd5b0..0e58800 100644
+--- a/nodejs/packages/layer/src/wrapper.ts
++++ b/nodejs/packages/layer/src/wrapper.ts
+@@ -32,6 +32,7 @@ import {
+ } from '@opentelemetry/resources';
+ import { awsLambdaDetector } from '@opentelemetry/resource-detector-aws';
+ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
++import { OTLPStdoutSpanExporter } from '@dev7a/otlp-stdout-span-exporter';
+ import {
+   Instrumentation,
+   registerInstrumentations,
+@@ -369,6 +370,7 @@ function getExportersFromEnv(): SpanExporter[] | null {
+   const stringToExporter = new Map<string, () => SpanExporter>([
+     ['otlp', () => new OTLPTraceExporter()],
+     ['console', () => new ConsoleSpanExporter()],
++    ['otlpstdout', () => new OTLPStdoutSpanExporter()],
+   ]);
+   const exporters: SpanExporter[] = [];
+   process.env.OTEL_TRACES_EXPORTER.split(',').map(exporterName => {

@@ -73,18 +73,14 @@ build-python-layer: clone-upstream ## Build the Python full layer from source
 build-node-layer: clone-upstream ## Build the Node.js full layer from source
 	@echo "Building Node full layer ($(UPSTREAM_VERSION)) …"
 	@mkdir -p $(DIST_DIR)
-	# Apply our patch to add configureExporters support
-	@cd $(CLONE_DIR) && git apply --ignore-whitespace $(PWD)/nodejs/wrapper-override.patch
-	@cp $(PWD)/nodejs/load-stdout-exporter.mjs $(CLONE_DIR)/nodejs/packages/layer/src/load-stdout-exporter.mjs
-	# Add our exporter as a dev dependency so webpack can find it for bundling
-	@echo "--> Adding OTLP stdout exporter as a dev dependency..."
-	@cd $(CLONE_DIR)/nodejs && npm install @dev7a/otlp-stdout-span-exporter@$(EXPORTER_VERSION) --save
+	# Apply our patch to add OTLP stdout exporter support
+	@cd $(CLONE_DIR) && git apply --ignore-whitespace $(PWD)/nodejs/wrapper-static.patch
+	# Add our exporter as a dependency to the layer package
+	# @echo "--> Adding OTLP stdout exporter as a dependency..."
+	@cd $(CLONE_DIR)/nodejs/packages/layer && npm install @dev7a/otlp-stdout-span-exporter@$(EXPORTER_VERSION) --save
 	# Install root dev dependencies (includes rimraf, etc.)
 	@cd $(CLONE_DIR)/nodejs && npm install
-	# Modify webpack.config.js to include our patch as a second entry point and add our node_modules to the resolution path
-	@echo "--> Modifying webpack config to add custom entry point..."
-	@cd $(CLONE_DIR) && git apply --ignore-whitespace $(PWD)/nodejs/webpack.config.js.patch
-	# Build the layer using npm build script, which will now bundle our exporter
+	# Build the layer using npm build script, which will bundle our exporter
 	@echo "--> Running upstream build..."
 	@cd $(CLONE_DIR)/nodejs/packages/layer && npm run build
 	# Copy the built layer

@@ -1,14 +1,11 @@
 diff --git a/nodejs/packages/layer/src/wrapper.ts b/nodejs/packages/layer/src/wrapper.ts
-index ecbd5b0..a3bb202 100644
+index 9953988..a632547 100644
 --- a/nodejs/packages/layer/src/wrapper.ts
 +++ b/nodejs/packages/layer/src/wrapper.ts
-@@ -83,6 +83,13 @@ declare global {
+@@ -83,6 +83,10 @@ declare global {
      defaultSdkRegistration: SDKRegistrationConfig,
    ): SDKRegistrationConfig;
    function configureTracer(defaultConfig: TracerConfig): TracerConfig;
-+  function configureExporterMap(
-+    exporterMap: Map<string, () => SpanExporter>,
-+  ): void;
 +  function configureExporters(
 +    exporters: SpanExporter[],
 +    exporterNames: string[],
@@ -16,24 +13,24 @@ index ecbd5b0..a3bb202 100644
  
    // No explicit metric type here, but "unknown" type.
    // Because metric packages are important dynamically.
-@@ -371,8 +378,16 @@ function getExportersFromEnv(): SpanExporter[] | null {
+@@ -369,10 +373,16 @@ function getExportersFromEnv(): SpanExporter[] | null {
+   const stringToExporter = new Map<string, () => SpanExporter>([
+     ['otlp', () => new OTLPTraceExporter()],
      ['console', () => new ConsoleSpanExporter()],
++    ['otlpstdout', () => {
++      const { OTLPStdoutSpanExporter } = require('@dev7a/otlp-stdout-span-exporter');
++      return new OTLPStdoutSpanExporter();
++    }],
    ]);
    const exporters: SpanExporter[] = [];
 +  const exporterNames: string[] = [];
-+
-+  // Allow downstream to extend the exporter map
-+  if (typeof configureExporterMap === 'function') {
-+    configureExporterMap(stringToExporter);
-+  }
-+
    process.env.OTEL_TRACES_EXPORTER.split(',').map(exporterName => {
      exporterName = exporterName.toLowerCase().trim();
 +    exporterNames.push(exporterName);
      const exporter = stringToExporter.get(exporterName);
      if (exporter) {
        exporters.push(exporter());
-@@ -382,6 +397,12 @@ function getExportersFromEnv(): SpanExporter[] | null {
+@@ -382,6 +392,12 @@ function getExportersFromEnv(): SpanExporter[] | null {
        );
      }
    });
