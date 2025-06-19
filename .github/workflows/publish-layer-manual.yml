@@ -303,19 +303,15 @@ jobs:
           aws-region: us-east-1
           mask-aws-account-id: false
 
-      - name: Collect layer ARNs
-        id: collect-arns
+      - name: Install Python dependencies for release notes
         run: |
-          # Get the actual AWS account ID
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          echo "Using AWS Account ID: $ACCOUNT_ID"
-          
-          # Create a summary of published layers
-          echo "## Published Layer ARNs" > release_notes.md
-          echo "" >> release_notes.md
-          
-          echo "### ${{ github.event.inputs.language }} Layer" >> release_notes.md
-          echo "" >> release_notes.md
+          pip install boto3 click
+
+      - name: Generate release notes
+        id: generate-notes
+        run: |
+          # Make sure the script is executable
+          chmod +x scripts/generate_release_notes.py
           
           # Construct the actual layer name as it was published
           LANGUAGE="${{ github.event.inputs.language }}"
@@ -328,57 +324,19 @@ jobs:
           
           echo "Layer name: $LAYER_NAME"
           
-          # Create table header
-          echo "| Region | Layer ARN |" >> release_notes.md
-          echo "|--------|-----------|" >> release_notes.md
-          
           # Get the list of regions where the layer was published
           regions_json='${{ needs.prepare-build-jobs.outputs.regions }}'
-          regions=($(echo "$regions_json" | jq -r '.aws_region[]'))
+          REGIONS=$(echo "$regions_json" | jq -r '.aws_region | join(",")')
           
-          # For each region, get the actual layer version and construct the ARN
-          for region in "${regions[@]}"; do
-            echo "Checking layer in region: $region"
-            
-            # Get the latest version number for this layer in this region
-            LAYER_VERSION=$(aws lambda list-layer-versions \
-              --layer-name "$LAYER_NAME" \
-              --region "$region" \
-              --query 'LayerVersions[0].Version' \
-              --output text 2>/dev/null || echo "1")
-            
-            # Create badge-style region name with doubled dashes
-            REGION_BADGE_NAME=$(echo "$region" | sed 's/-/--/g')
-            REGION_BADGE="![${region}](https://img.shields.io/badge/${REGION_BADGE_NAME}-eee?style=for-the-badge)"
-            
-            if [[ "$LAYER_VERSION" != "None" && "$LAYER_VERSION" != "" ]]; then
-              LAYER_ARN="arn:aws:lambda:$region:$ACCOUNT_ID:layer:$LAYER_NAME:$LAYER_VERSION"
-              echo "| $REGION_BADGE | \`$LAYER_ARN\` |" >> release_notes.md
-            else
-              echo "| $REGION_BADGE | ❌ Layer not found or failed to publish |" >> release_notes.md
-            fi
-          done
-          
-          echo "" >> release_notes.md
-          echo "### Usage" >> release_notes.md
-          echo "" >> release_notes.md
-          
-          if [[ "${{ github.event.inputs.language }}" == "python" ]]; then
-            echo "Add this layer to your Lambda function and set:" >> release_notes.md
-            echo "- \`AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-instrument\`" >> release_notes.md
-            echo "- \`OTEL_TRACES_EXPORTER=otlpstdout\`" >> release_notes.md
-          else
-            echo "Add this layer to your Lambda function and set:" >> release_notes.md
-            echo "- \`AWS_LAMBDA_EXEC_WRAPPER=/opt/otel-handler\`" >> release_notes.md
-            echo "- \`OTEL_TRACES_EXPORTER=otlpstdout\`" >> release_notes.md
-          fi
-          
-          echo "" >> release_notes.md
-          echo "### Details" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "- **Upstream OpenTelemetry**: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}" >> release_notes.md
-          echo "- **OTLP Stdout Exporter**: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}" >> release_notes.md
-          echo "- **Release Group**: ${{ github.event.inputs.release-group }}" >> release_notes.md
+          # Use the Python script to generate release notes
+          python3 scripts/generate_release_notes.py \
+            --language "$LANGUAGE" \
+            --upstream-version "$UPSTREAM_VERSION" \
+            --exporter-version "${{ needs.build-layers.outputs.EXPORTER_VERSION }}" \
+            --release-group "$RELEASE_GROUP" \
+            --regions "$REGIONS" \
+            --layer-name "$LAYER_NAME" \
+            > release_notes.md
 
       - name: Create GitHub Release
         run: |
