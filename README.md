@@ -167,9 +167,12 @@ All clean targets include confirmation prompts for safety.
     - `main`, branches, commits → Uses as-is for development builds
 - **Features**:
   - Smart tag construction from semantic versions (reduces typos)
-  - Automatic GitHub release creation for version tags
-  - Real layer ARN documentation in release notes
+  - Automatic GitHub release creation for all manual builds
+  - Release notes with HTML tables, badges, and collapsible sections
+  - Layer ARN documentation organized by continent/region
+  - Practical CloudFormation examples with actual ARNs
   - Input validation to prevent language/tag mismatches
+  - Full traceability with timestamped releases for development builds
 
 ### Utility Workflows
 
@@ -217,8 +220,8 @@ The manual workflow supports several upstream branch/tag formats:
 #### **Generic References**
 - **Input**: `main`, `feature-branch`, commit hash
 - **Result**: Uses reference as-is for building
-- **Creates Release**: No
-- **Use Case**: Development, testing, custom builds
+- **Creates Release**: Yes, with timestamped manual release tag (e.g., `manual-python-main-20240115-143022-beta`)
+- **Use Case**: Development, testing, custom builds with full traceability
 
 ### Examples
 
@@ -252,7 +255,7 @@ Language: python
 Upstream branch: main
 Release group: dev
 ```
-No GitHub release created
+Creates GitHub release with tag `manual-python-main-20240115-143022-dev`
 
 ### Required Secrets
 

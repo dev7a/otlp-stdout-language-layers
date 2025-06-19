@@ -83,6 +83,7 @@ jobs:
     outputs:
       EXPORTER_VERSION: ${{ steps.save-exporter-version.outputs.EXPORTER_VERSION }}
       UPSTREAM_VERSION: ${{ steps.save-upstream-version.outputs.UPSTREAM_VERSION }}
+      LAYER_NAME: ${{ steps.determine-layer-name.outputs.LAYER_NAME }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4 # v4.2.2
@@ -160,6 +161,32 @@ jobs:
           
           echo "UPSTREAM_VERSION=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
 
+      - name: Determine Layer Name
+        id: determine-layer-name
+        run: |
+          LANGUAGE="${{ matrix.language }}"
+          RELEASE_GROUP="${{ github.event.inputs.release-group }}"
+          UPSTREAM_VERSION="${{ steps.save-upstream-version.outputs.UPSTREAM_VERSION }}"
+          
+          # Construct base layer name
+          if [[ "$LANGUAGE" == "python" ]]; then
+            LAYER_NAME="otlp-stdout-python"
+          else
+            LAYER_NAME="otlp-stdout-nodejs"
+          fi
+          
+          # Add release group
+          LAYER_NAME="$LAYER_NAME-$RELEASE_GROUP"
+          
+          # Clean up upstream version for layer naming
+          UPSTREAM_VERSION_CLEANED=$(echo "$UPSTREAM_VERSION" | sed -E 's|^layer-[^/]+/||' | sed -r 's/[\.\/]/_/g')
+          if [[ -n "$UPSTREAM_VERSION_CLEANED" ]]; then
+            LAYER_NAME="$LAYER_NAME-$UPSTREAM_VERSION_CLEANED"
+          fi
+          
+          echo "Determined layer name: $LAYER_NAME"
+          echo "LAYER_NAME=$LAYER_NAME" >> $GITHUB_OUTPUT
+
       - name: Build Python Layer
         if: matrix.language == 'python'
         run: |
@@ -223,6 +250,7 @@ jobs:
     with:
       artifact-name: otlp-stdout-python-layer-manual.zip
       layer-name: otlp-stdout-python
+      full-layer-name: ${{ needs.build-layers.outputs.LAYER_NAME }}
       component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
       upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
       runtimes: python3.13
@@ -239,6 +267,7 @@ jobs:
     with:
       artifact-name: otlp-stdout-nodejs-layer-manual.zip
       layer-name: otlp-stdout-nodejs
+      full-layer-name: ${{ needs.build-layers.outputs.LAYER_NAME }}
       component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
       upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
       runtimes: nodejs22.x
@@ -249,7 +278,6 @@ jobs:
   create-release:
     if: |
       always() &&
-      (startsWith(github.event.inputs.upstream-branch, 'v') || startsWith(github.event.inputs.upstream-branch, 'layer-')) &&
       needs.build-layers.result == 'success' &&
       (
         (github.event.inputs.language == 'python' && needs.publish-python-layer.result == 'success') ||
@@ -266,6 +294,7 @@ jobs:
           UPSTREAM="${{ github.event.inputs.upstream-branch }}"
           LANGUAGE="${{ github.event.inputs.language }}"
           RELEASE_GROUP="${{ github.event.inputs.release-group }}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           
           if [[ "$UPSTREAM" == layer-* ]]; then
             # Extract version from existing layer tag (e.g., layer-python/0.14.0 -> 0.14.0)
@@ -281,8 +310,10 @@ jobs:
             VERSION=${UPSTREAM#v}
             BASE_TAG="layer-$LANGUAGE/$VERSION"
           else
-            echo "::error::Upstream branch '$UPSTREAM' doesn't look like a release tag"
-            exit 1
+            # For non-version builds (main, branches, commits), create a timestamped manual release tag
+            # Clean the upstream name for safe tag usage
+            SAFE_UPSTREAM=$(echo "$UPSTREAM" | sed 's/[^a-zA-Z0-9._-]/_/g')
+            BASE_TAG="manual-$LANGUAGE-$SAFE_UPSTREAM-$TIMESTAMP"
           fi
           
           # Append release group to the tag unless it's 'prod' (production releases get clean tags)
@@ -313,16 +344,13 @@ jobs:
           # Make sure the script is executable
           chmod +x scripts/generate_release_notes.py
           
-          # Construct the actual layer name as it was published
+          # Use the layer name determined in build-layers (guaranteed to match what was actually published)
+          LAYER_NAME="${{ needs.build-layers.outputs.LAYER_NAME }}"
           LANGUAGE="${{ github.event.inputs.language }}"
-          RELEASE_GROUP="${{ github.event.inputs.release-group }}"
           UPSTREAM_VERSION="${{ needs.build-layers.outputs.UPSTREAM_VERSION }}"
+          RELEASE_GROUP="${{ github.event.inputs.release-group }}"
           
-          # Clean up upstream version for layer naming (same logic as layer-publish.yml)
-          UPSTREAM_VERSION_CLEANED=$(echo "$UPSTREAM_VERSION" | sed -E 's|^layer-[^/]+/||' | sed -r 's/[\.\/]/_/g')
-          LAYER_NAME="otlp-stdout-$LANGUAGE-$RELEASE_GROUP-$UPSTREAM_VERSION_CLEANED"
-          
-          echo "Layer name: $LAYER_NAME"
+          echo "Using layer name: $LAYER_NAME"
           
           # Get the list of regions where the layer was published
           regions_json='${{ needs.prepare-build-jobs.outputs.regions }}'
