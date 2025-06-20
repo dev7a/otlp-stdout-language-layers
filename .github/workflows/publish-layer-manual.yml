@@ -363,10 +363,39 @@ jobs:
             > release_notes.md
 
       - name: Create GitHub Release
-        run: |
-          gh release create "${{ steps.release-tag.outputs.release-tag }}" \
-            --title "OTLP Stdout ${{ github.event.inputs.language }} Layer ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}" \
-            --notes-file release_notes.md \
-            --draft=false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_TAG="${{ steps.release-tag.outputs.release-tag }}"
+          
+          # Extract clean version for release title
+          UPSTREAM="${{ needs.build-layers.outputs.UPSTREAM_VERSION }}"
+          if [[ "$UPSTREAM" =~ ^layer-[^/]+/(.+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+          elif [[ "$UPSTREAM" =~ ^v(.+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+          else
+            VERSION="$UPSTREAM"
+          fi
+          
+          # Capitalize language for title
+          LANGUAGE="${{ github.event.inputs.language }}"
+          LANGUAGE_TITLE="$(echo ${LANGUAGE:0:1} | tr '[:lower:]' '[:upper:]')${LANGUAGE:1}"
+          
+          # Include release group if not prod
+          RELEASE_GROUP="${{ github.event.inputs.release-group }}"
+          if [[ "$RELEASE_GROUP" != "prod" ]]; then
+            RELEASE_SUFFIX=" ($RELEASE_GROUP)"
+          else
+            RELEASE_SUFFIX=""
+          fi
+          
+          RELEASE_NAME="OTLP Stdout $LANGUAGE_TITLE Layer v$VERSION$RELEASE_SUFFIX"
+          
+          echo "Creating release: $RELEASE_NAME"
+          echo "Tag: $RELEASE_TAG"
+          
+          gh release create "$RELEASE_TAG" \
+            --title "$RELEASE_NAME" \
+            --notes-file release_notes.md \
+            --target "${{ github.sha }}"

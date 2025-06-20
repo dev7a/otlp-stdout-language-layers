@@ -13,6 +13,7 @@ Generate markdown release notes for OTLP stdout Lambda layers.
 import sys
 import click
 import boto3
+import re
 from botocore.exceptions import ClientError
 from typing import Dict, List, Optional
 
@@ -50,6 +51,19 @@ REGION_NAMES = {
     "eu-west-2": "Europe (London)",
     "eu-west-3": "Europe (Paris)",
 }
+
+
+def extract_clean_version(upstream_version: str) -> str:
+    """Extract a clean version string from various upstream version formats."""
+    # Match layer-python/0.14.0 or layer-nodejs/0.14.0
+    if match := re.match(r'^layer-[^/]+/(.+)$', upstream_version):
+        return match.group(1)
+    # Match v0.14.0
+    elif match := re.match(r'^v(.+)$', upstream_version):
+        return match.group(1)
+    # Return as-is for other formats (main, branches, etc.)
+    else:
+        return upstream_version
 
 
 def get_layer_arn(layer_name: str, region: str) -> Optional[str]:
@@ -112,15 +126,21 @@ def generate_release_notes(
     # Determine runtime
     runtime = "python3.13" if language == "python" else "nodejs22.x"
     
+    # Extract clean version for header
+    clean_version = extract_clean_version(upstream_version)
+    
+    # Capitalize language for display
+    language_display = language.capitalize()
+    
     # Generate release notes
     lines = []
     
     # Header and description
     lines.extend([
-        f"## Release Details for {language} - Upstream {upstream_version}",
+        f"## Release Details for {language_display} v{clean_version}",
         "",
         "### Distribution Description",
-        f"> OpenTelemetry Lambda Layer for {language} with OTLP stdout exporter",
+        f"> OpenTelemetry Lambda Layer for {language_display} with OTLP stdout exporter",
         "> ",
         "> This layer provides automatic OpenTelemetry instrumentation for Lambda functions, sending traces to stdout in OTLP format for further processing by log-based telemetry systems.",
         "",
