@@ -77,7 +77,7 @@ build-node-layer: clone-upstream ## Build the Node.js full layer from source
 	@cd $(CLONE_DIR) && git apply --ignore-whitespace $(PWD)/nodejs/wrapper-static.patch
 	# Add our exporter as a dependency to the layer package
 	# @echo "--> Adding OTLP stdout exporter as a dependency..."
-	@cd $(CLONE_DIR)/nodejs/packages/layer && npm install @dev7a/otlp-stdout-span-exporter@$(EXPORTER_VERSION) --save
+	@cd $(CLONE_DIR)/nodejs/packages/layer && npm install @dev7a/otlp-stdout-span-exporter@$(EXPORTER_VERSION) @opentelemetry/api @opentelemetry/core @opentelemetry/otlp-transformer @opentelemetry/sdk-trace-base --save
 	# Install root dev dependencies (includes rimraf, etc.)
 	@cd $(CLONE_DIR)/nodejs && npm install
 	# Build the layer using npm build script, which will bundle our exporter

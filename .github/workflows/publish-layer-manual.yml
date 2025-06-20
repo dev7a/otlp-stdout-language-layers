@@ -249,12 +249,10 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare-build-jobs.outputs.regions) }}
     with:
       artifact-name: otlp-stdout-python-layer-manual.zip
-      layer-name: otlp-stdout-python
-      full-layer-name: ${{ needs.build-layers.outputs.LAYER_NAME }}
+      base-layer-name: ${{ needs.build-layers.outputs.LAYER_NAME }}
       component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
       upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
       runtimes: python3.13
-      release-group: ${{ github.event.inputs.release-group }}
       aws_region: ${{ matrix.aws_region }}
     secrets: inherit
 
@@ -266,12 +264,10 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare-build-jobs.outputs.regions) }}
     with:
       artifact-name: otlp-stdout-nodejs-layer-manual.zip
-      layer-name: otlp-stdout-nodejs
-      full-layer-name: ${{ needs.build-layers.outputs.LAYER_NAME }}
+      base-layer-name: ${{ needs.build-layers.outputs.LAYER_NAME }}
       component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
       upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
       runtimes: nodejs22.x
-      release-group: ${{ github.event.inputs.release-group }}
       aws_region: ${{ matrix.aws_region }}
     secrets: inherit
 

@@ -14,13 +14,9 @@ on:
         description: 'Name of the artifact containing the layer zip file'
         required: true
         type: string
-      layer-name:
-        description: 'Base layer name (e.g., otlp-stdout-python)'
+      base-layer-name:
+        description: 'The exact, constructed layer name, without architecture suffix.'
         required: true
-        type: string
-      full-layer-name:
-        description: 'Full constructed layer name (e.g., otlp-stdout-python-beta-0_14_0)'
-        required: false
         type: string
       component-version:
         description: 'Version of the otlp-stdout component included in this release'
@@ -37,11 +33,6 @@ on:
       architecture:
         description: '(optional) amd64 or arm64'
         required: false
-        type: string
-      release-group:
-        description: 'Release to dev or prod environment (Default: dev)'
-        required: false
-        default: dev
         type: string
       aws_region:
         description: 'AWS region to publish to'
@@ -63,32 +54,15 @@ jobs:
       layer-arn: ${{ steps.publish-layer.outputs.layer-arn }}
       layer-name: ${{ steps.construct-name.outputs.layer-name }}
     steps:
-      - name: Construct Layer Name
+      - name: Construct Final Layer Name
         id: construct-name
         shell: bash
         run: |
-          # Use full-layer-name if provided, otherwise construct it
-          if [[ -n "${{ inputs.full-layer-name }}" ]]; then
-            LAYER_NAME="${{ inputs.full-layer-name }}"
-            echo "Using provided full layer name: $LAYER_NAME"
-          else
-            # Fall back to original construction logic
-            LAYER_NAME=${{ inputs.layer-name }}
-            
-            LAYER_NAME=$LAYER_NAME-${{ inputs.release-group }}
-            
-            # Clean up upstream version for layer naming
-            # Remove layer-python/ or layer-nodejs/ prefix if present, then clean special chars
-            UPSTREAM_VERSION_CLEANED=$(echo "${{ inputs.upstream-version }}" | sed -E 's|^layer-[^/]+/||' | sed -r 's/[\.\/]/_/g')
-            if [[ -n "$UPSTREAM_VERSION_CLEANED" ]]; then
-              LAYER_NAME=$LAYER_NAME-$UPSTREAM_VERSION_CLEANED
-            fi
-            echo "Constructed layer name: $LAYER_NAME"
-          fi
+          LAYER_NAME="${{ inputs.base-layer-name }}"
           
-          # Handle architecture 
+          # Handle architecture suffix if architecture is specified
           if [[ -n "${{ inputs.architecture }}" ]]; then
-            LAYER_NAME=$LAYER_NAME-${{ inputs.architecture }}
+            LAYER_NAME="$LAYER_NAME-${{ inputs.architecture }}"
             ARCH=$(echo "${{ inputs.architecture }}" | sed -r 's/amd64/x86_64/g')
           else
             ARCH="x86_64 arm64"
