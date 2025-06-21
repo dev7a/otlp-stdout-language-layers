@@ -170,9 +170,9 @@ jobs:
           
           # Construct base layer name
           if [[ "$LANGUAGE" == "python" ]]; then
-            LAYER_NAME="otlp-stdout-python"
+            LAYER_NAME="otlpstdout-python"
           else
-            LAYER_NAME="otlp-stdout-nodejs"
+            LAYER_NAME="otlpstdout-nodejs"
           fi
           
           # Add release group

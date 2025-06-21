@@ -67,7 +67,7 @@ build-python-layer: clone-upstream ## Build the Python full layer from source
 	@rm -rf $(DIST_DIR)/python-layer-temp/python/boto*
 	@rm -rf $(DIST_DIR)/python-layer-temp/python/urllib3*
 	# Package the layer
-	@cd $(DIST_DIR)/python-layer-temp && zip -qr ../otlp-stdout-python-$(UPSTREAM_VERSION).zip .
+	@cd $(DIST_DIR)/python-layer-temp && zip -qr ../otlpstdout-python-$(UPSTREAM_VERSION).zip .
 	@rm -rf $(DIST_DIR)/python-layer-temp
 
 build-node-layer: clone-upstream ## Build the Node.js full layer from source
@@ -85,15 +85,15 @@ build-node-layer: clone-upstream ## Build the Node.js full layer from source
 	@cd $(CLONE_DIR)/nodejs/packages/layer && npm run build
 	# Copy the built layer
 	@echo "--> Copying final artifact..."
-	@cp $(CLONE_DIR)/nodejs/packages/layer/build/layer.zip $(DIST_DIR)/otlp-stdout-node-$(UPSTREAM_VERSION).zip
+	@cp $(CLONE_DIR)/nodejs/packages/layer/build/layer.zip $(DIST_DIR)/otlpstdout-node-$(UPSTREAM_VERSION).zip
 
 
 publish-python-layer: build-python-layer ## Build and publish the Python layer to AWS (for local development)
 	@echo "Publishing Python layer to AWS account in $(AWS_REGION) (local development) …"
 	@LAYER_ARN=$$(aws lambda publish-layer-version \
-	    --layer-name "local-otlp-stdout-python-$(shell echo $(UPSTREAM_VERSION) | tr '.' '_')" \
+	    --layer-name "local-otlpstdout-python-$(shell echo $(UPSTREAM_VERSION) | tr '.' '_')" \
 	    --description "OTLP Stdout exporter for OpenTelemetry Python ($(UPSTREAM_VERSION)) - Local Development" \
-	    --zip-file fileb://$(DIST_DIR)/otlp-stdout-python-$(UPSTREAM_VERSION).zip \
+	    --zip-file fileb://$(DIST_DIR)/otlpstdout-python-$(UPSTREAM_VERSION).zip \
 	    --compatible-runtimes python3.8 python3.9 python3.10 python3.11 python3.12 python3.13 \
 	    --region $(AWS_REGION) \
 	    --query 'LayerVersionArn' --output text) && \
@@ -102,9 +102,9 @@ publish-python-layer: build-python-layer ## Build and publish the Python layer t
 publish-node-layer: build-node-layer ## Build and publish the Node.js layer to AWS (for local development)
 	@echo "Publishing Node.js layer to AWS account in $(AWS_REGION) (local development) …"
 	@LAYER_ARN=$$(aws lambda publish-layer-version \
-	    --layer-name "local-otlp-stdout-node-$(shell echo $(UPSTREAM_VERSION) | tr '.' '_')" \
+	    --layer-name "local-otlpstdout-node-$(shell echo $(UPSTREAM_VERSION) | tr '.' '_')" \
 	    --description "OTLP Stdout exporter for OpenTelemetry Node.js ($(UPSTREAM_VERSION)) - Local Development" \
-	    --zip-file fileb://$(DIST_DIR)/otlp-stdout-node-$(UPSTREAM_VERSION).zip \
+	    --zip-file fileb://$(DIST_DIR)/otlpstdout-node-$(UPSTREAM_VERSION).zip \
 	    --compatible-runtimes nodejs18.x nodejs20.x nodejs22.x \
 	    --region $(AWS_REGION) \
 	    --query 'LayerVersionArn' --output text) && \
@@ -126,17 +126,17 @@ show-arns: ## Show the ARNs of the latest published local development layers
 	@echo ""
 	@echo "Python layer (local):"
 	@aws lambda get-layer-version \
-	    --layer-name "local-otlp-stdout-python-$(UPSTREAM_VERSION)" \
+	    --layer-name "local-otlpstdout-python-$(UPSTREAM_VERSION)" \
 	    --version-number $$(aws lambda list-layer-versions \
-	        --layer-name "local-otlp-stdout-python-$(UPSTREAM_VERSION)" \
+	        --layer-name "local-otlpstdout-python-$(UPSTREAM_VERSION)" \
 	        --query 'LayerVersions[0].Version' --output text) \
 	    --query 'LayerVersionArn' --output text 2>/dev/null || echo "  (not published yet)"
 	@echo ""
 	@echo "Node.js layer (local):"
 	@aws lambda get-layer-version \
-	    --layer-name "local-otlp-stdout-node-$(UPSTREAM_VERSION)" \
+	    --layer-name "local-otlpstdout-node-$(UPSTREAM_VERSION)" \
 	    --version-number $$(aws lambda list-layer-versions \
-	        --layer-name "local-otlp-stdout-node-$(UPSTREAM_VERSION)" \
+	        --layer-name "local-otlpstdout-node-$(UPSTREAM_VERSION)" \
 	        --query 'LayerVersions[0].Version' --output text) \
 	    --query 'LayerVersionArn' --output text 2>/dev/null || echo "  (not published yet)"
 
