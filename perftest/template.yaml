@@ -1,0 +1,366 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: AWS SAM template for the serverless-otlp-forwarder benchmark.
+
+Metadata:
+  Description: >
+    AWS SAM template for the serverless-otlp-forwarder benchmark.
+
+Globals:
+  Api:
+    OpenApiVersion: 3.0.1
+
+Mappings:
+  # Note: This list of layer arns is for us-east-1 only.
+  # Last versions on June 17, 2025
+  # otel https://github.com/open-telemetry/opentelemetry-lambda/releases
+  CollectorLayers:
+    Generic: # Dummy TopLevelKey
+      otel: 'arn:aws:lambda:us-east-1:184161586896:layer:opentelemetry-collector-arm64-0_15_0:1' 
+  LanguageLayers:
+    python:
+      otel: 'arn:aws:lambda:us-east-1:184161586896:layer:opentelemetry-python-0_14_0:1'
+      otlpstdout: 'arn:aws:lambda:us-east-1:961341555982:layer:otlpstdout-python-beta-0_14_0:1'
+    nodejs:
+      otel: 'arn:aws:lambda:us-east-1:184161586896:layer:opentelemetry-nodejs-0_14_0:1'
+      otlpstdout: 'arn:aws:lambda:us-east-1:961341555982:layer:otlpstdout-nodejs-beta-0_14_0:1'
+
+Globals:
+  Function:
+    Architectures:
+      - arm64
+    Timeout: 10
+    MemorySize: 128
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: INFO
+      SystemLogLevel: INFO
+    Tracing: Active
+    Environment:
+      Variables:
+        OTEL_METRICS_EXPORTER: none
+        OTEL_LOGS_EXPORTER: none
+        OTEL_TRACES_EXPORTER: otlp
+        OTEL_PYTHON_DISABLED_INSTRUMENTATIONS: aiohttp,aiohttp-client,asyncpg,boto,celery,django,elasticsearch,falcon,fastapi,flask,grpc_aio_client,grpc_aio_server,grpc_client,grpc_server,jinja2,mysql,psycopg2,pymemcache,pymongo,pymysql,pyramid,redis,sqlalchemy,starlette,tornado
+        OTEL_NODE_DISABLED_INSTRUMENTATIONS: amqplib,bunyan,cassandra-driver,connect,cucumber,dataloader,dns,express,generic-pool,graphql,grpc,hapi,http,ioredis,kafkajs,knex,koa,lru-memoizer,memcached,mongodb,mongoose,mysql2,mysql,nestjs-core,net,pg,pino,redis,redis-4,restify,router,socket.io,tedious,undici,winston
+        OTEL_TRACES_SAMPLER: always_on
+        OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+        OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+        MOCK_OTLP_ENDPOINT: !Sub 'https://${MockOTLPReceiver}.execute-api.${AWS::Region}.amazonaws.com'
+Resources:
+
+  NodeLiteSync:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: 'es2022'
+        Format: 'cjs'
+        Platform: 'node'
+        EntryPoints: 
+          - index.js
+          - init.js
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-node-lite-sync'
+      CodeUri: functions/nodejs/manual/
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-node-lite-sync'
+          LAMBDA_EXTENSION_SPAN_PROCESSOR_MODE: sync
+  
+  NodeLiteAsync:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: 'es2022'
+        Format: 'cjs'
+        Platform: 'node'
+        EntryPoints: 
+          - index.js
+          - init.js
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-node-lite-async'
+      CodeUri: functions/nodejs/manual/
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-node-lite-async'
+          LAMBDA_EXTENSION_SPAN_PROCESSOR_MODE: async
+          NODE_OPTIONS: --require /var/task/init.js
+  
+  NodeOtelCollector:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: 'es2022'
+        Format: 'cjs'
+        Platform: 'node'
+        EntryPoints: 
+          - index.js
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-node-otel-collector'
+      CodeUri: functions/nodejs/auto/
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-node-otel-collector'
+          OPENTELEMETRY_COLLECTOR_CONFIG_URI: '/opt/otel/collector.yaml'
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-handler
+      Layers:
+        - !FindInMap [LanguageLayers, nodejs, otel]
+        - !FindInMap [CollectorLayers, Generic, otel]
+        - !Ref CollectorConfiglLayer
+
+  NodeOtelDirect:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: 'es2022'
+        Format: 'cjs'
+        Platform: 'node'
+        EntryPoints: 
+          - index.js
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-node-otel-direct'
+      CodeUri: functions/nodejs/auto/
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-node-otel-direct'
+          OTEL_EXPORTER_OTLP_ENDPOINT: !Sub 'https://${MockOTLPReceiver}.execute-api.${AWS::Region}.amazonaws.com'
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-handler
+      Layers:
+        - !FindInMap [LanguageLayers, nodejs, otel]
+
+  NodeOtelStdout:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: 'es2022'
+        Format: 'cjs'
+        Platform: 'node'
+        EntryPoints: 
+          - index.js
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-node-otel-stdout'
+      CodeUri: functions/nodejs/auto/
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-node-otel-stdout'
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-handler
+          OTEL_TRACES_EXPORTER: otlpstdout
+      Layers:
+        - !FindInMap [LanguageLayers, nodejs, otlpstdout]
+  
+  
+  PythonLiteSync:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-python-lite-sync'
+      CodeUri: functions/python/manual/
+      Handler: main.handler
+      Runtime: python3.13
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-python-lite-sync'
+          LAMBDA_EXTENSION_SPAN_PROCESSOR_MODE: sync
+
+  PythonLiteAsync:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-python-lite-async'
+      CodeUri: functions/python/manual/
+      Handler: main.handler
+      Runtime: python3.13
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-python-lite-async'
+          LAMBDA_EXTENSION_SPAN_PROCESSOR_MODE: async
+
+  PythonOtelCollector:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-python-otel-collector'
+      CodeUri: functions/python/auto/
+      Handler: main.handler
+      Runtime: python3.13
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-python-otel-collector'
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-instrument
+          OPENTELEMETRY_COLLECTOR_CONFIG_URI: '/opt/otel/collector.yaml'
+      Layers:
+        - !FindInMap [LanguageLayers, python, otel]
+        - !FindInMap [CollectorLayers, Generic, otel]
+        - !Ref CollectorConfiglLayer
+
+  PythonOtelDirect:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-python-otel-direct'
+      CodeUri: functions/python/auto/
+      Handler: main.handler
+      Runtime: python3.13
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-python-otel-direct'
+          OTEL_EXPORTER_OTLP_ENDPOINT: !Sub 'https://${MockOTLPReceiver}.execute-api.${AWS::Region}.amazonaws.com'
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-instrument
+      Layers:
+        - !FindInMap [LanguageLayers, python, otel]
+
+  PythonOtelStdout:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-python-otel-stdout'
+      CodeUri: functions/python/auto/
+      Handler: main.handler
+      Runtime: python3.13
+      Environment:
+        Variables:
+          OTEL_SERVICE_NAME: !Sub '${AWS::StackName}-python-otel-stdout'
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-instrument
+          OPENTELEMETRY_COLLECTOR_CONFIG_URI: '/opt/otel/collector.yaml'
+          OTEL_TRACES_EXPORTER: otlpstdout
+      Layers:
+        - !FindInMap [LanguageLayers, python, otlpstdout]
+
+  # API Gateway
+  MockOTLPReceiver:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: v1
+      EndpointConfiguration: REGIONAL
+      DefinitionBody:
+        openapi: 3.0.1
+        info:
+          title: !Sub '${AWS::StackName}-mock-otlp-receiver'
+          version: '1.0'
+        paths:
+          /{signal}:
+            post:
+              summary: Mock OTLP/protobuf endpoint for any signal
+              parameters:
+                - name: signal
+                  in: path
+                  required: true
+                  schema:
+                    type: string
+              requestBody:
+                description: OTLP protobuf payload (content ignored by mock)
+                content:
+                  application/x-protobuf: {}
+                required: false
+              x-amazon-apigateway-integration:
+                type: mock
+                requestTemplates:
+                  application/x-protobuf: '{"statusCode": 200}'
+                passthroughBehavior: when_no_match
+                connectionType: INTERNET
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseTemplates:
+                      application/x-protobuf: |
+                        #set($context.responseOverride.header.Content-Type = "application/x-protobuf")
+                    headerParameters:
+                      Content-Type: "'application/x-protobuf'"
+              responses:
+                '200':
+                  description: 'Successful mock response'
+                  content:
+                    application/x-protobuf:
+                      schema:
+                        type: string
+                        format: binary
+
+  # Layer for OTEL Collector Config
+  CollectorConfiglLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub '${AWS::StackName}-otel-config'
+      ContentUri: functions/confmaps/
+    Metadata:
+      BuildMethod: makefile
+
+  # Efficient Rust proxy function used to determine client side duration
+  ProxyFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: rust-cargolambda
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-proxy'
+      Description: 'Generic Rust proxy function used to determine client side duration'
+      CodeUri: ./proxy
+      Handler: bootstrap
+      Runtime: provided.al2023
+      MemorySize: 512
+      Tracing: Active
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - 'lambda:InvokeFunction'
+              Resource: '*'
+
+
+Outputs:
+  ProxyFunctionArn:
+    Description: Proxy Function ARN
+    Value: !GetAtt ProxyFunction.Arn
+
+  # Node.js
+  NodeLiteSync:
+    Description: Node.js Lambda Otel Lite Function ARN
+    Value: !GetAtt NodeLiteSync.Arn
+  NodeLiteAsync:
+    Description: Node.js Lambda Otel Lite Function ARN
+    Value: !GetAtt NodeLiteAsync.Arn
+  NodeOtelCollector:
+    Description: Node.js Lambda Otel Collector Function ARN
+    Value: !GetAtt NodeOtelCollector.Arn
+  NodeOtelDirect:
+    Description: Node.js Lambda Otel Direct Function ARN
+    Value: !GetAtt NodeOtelDirect.Arn
+  NodeOtelStdout:
+    Description: Node.js Lambda Otel OTLP Stdout Function ARN
+    Value: !GetAtt NodeOtelStdout.Arn
+
+  # Python
+  PythonLiteSync:
+    Description: Python Manual OTLP Function ARN (Sync)
+    Value: !GetAtt PythonLiteSync.Arn
+  PythonLiteAsync:
+    Description: Python Manual OTLP Function ARN (Async)
+    Value: !GetAtt PythonLiteAsync.Arn
+  PythonOtelCollector:
+    Description: Python Lambda Otel Collector Function ARN
+    Value: !GetAtt PythonOtelCollector.Arn
+  PythonOtelDirect:
+    Description: Python Lambda Otel Direct Function ARN
+    Value: !GetAtt PythonOtelDirect.Arn
+  PythonOtelStdout:
+    Description: Python Lambda Otel OTLP Stdout Function ARN
+    Value: !GetAtt PythonOtelStdout.Arn
+
+  MockApiEndpoint:
+    Description: 'API Gateway Mock endpoint URL'
+    Value: !Sub 'https://${MockOTLPReceiver}.execute-api.${AWS::Region}.amazonaws.com/v1/traces'
+

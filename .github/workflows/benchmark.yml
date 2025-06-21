@@ -1,0 +1,82 @@
+name: Generate Performance Report
+
+on:
+  # Allow manual triggering
+  workflow_dispatch:
+  
+  # Run on pushes to main that affect results or configuration
+  push:
+    branches: [ main ]
+    paths:
+      - 'perftest/results/**'
+      - 'perftest/testbed.md'
+      - '.github/workflows/benchmark.yml'
+
+jobs:
+  generate-report:
+    name: Generate and Publish Performance Report
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Download startled CLI
+      run: |
+        echo "Downloading startled CLI..."
+        curl -L -o /usr/local/bin/startled \
+          https://github.com/dev7a/serverless-otlp-forwarder/releases/download/cli%2Fstartled-v0.3.3/startled-linux-amd64
+        chmod +x /usr/local/bin/startled
+        echo "startled CLI downloaded and installed"
+        startled --version
+    
+    - name: Check if results directory exists
+      working-directory: perftest
+      run: |
+        if [ ! -d "results" ]; then
+          echo "❌ Results directory not found. Please commit benchmark results to perftest/results/"
+          exit 1
+        fi
+        echo "✅ Results directory found"
+        echo "Results files:"
+        find results -name "*.json" | head -10
+    
+    - name: Generate performance report
+      working-directory: perftest
+      run: |
+        echo "Generating performance report from committed results..."
+        startled report \
+          --dir=results \
+          --output=/tmp/perftest/report \
+          --description="Lambda language layers performance test" \
+          --readme=testbed.md
+        echo "Performance report generated"
+    
+    - name: Add timestamp to report
+      run: |
+        echo "Adding timestamp to report..."
+        TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+        echo "<p><em>Report generated: $TIMESTAMP from committed results</em></p>" >> /tmp/perftest/report/index.html
+        echo "Timestamp added to report"
+    
+    - name: Setup GitHub Pages
+      uses: actions/configure-pages@v4
+    
+    - name: Upload report to GitHub Pages
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: /tmp/perftest/report
+    
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+    
+    - name: Report deployment URL
+      run: |
+        echo "🎉 Performance report deployed successfully!"
+        echo "📊 View results at: ${{ steps.deployment.outputs.page_url }}" 
