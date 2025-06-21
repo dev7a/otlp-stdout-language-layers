@@ -48,8 +48,12 @@ jobs:
       - name: Verify layer contents
         run: |
           cd dist
-          # Find the actual zip file created (with version in name)
-          ZIP_FILE=$(ls otlp-stdout-python-*.zip | head -1)
+          # Find any zip file created
+          ZIP_FILE=$(ls *.zip | head -1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "❌ No zip file found in dist/"
+            exit 1
+          fi
           echo "Verifying layer file: $ZIP_FILE"
           unzip -l "$ZIP_FILE" | grep -E "(otlp_stdout|otel)"
           echo "✅ Layer built successfully with required components" 
