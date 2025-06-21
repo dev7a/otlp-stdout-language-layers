@@ -38,7 +38,7 @@ jobs:
       run: |
         echo "Downloading startled CLI..."
         curl -L -o /usr/local/bin/startled \
-          https://github.com/dev7a/serverless-otlp-forwarder/releases/download/cli%2Fstartled-v0.4.0/startled-linux-amd64
+          https://github.com/dev7a/serverless-otlp-forwarder/releases/download/cli%2Fstartled-v0.4.1/startled-linux-amd64
         chmod +x /usr/local/bin/startled
         echo "startled CLI downloaded and installed"
         startled --version
