@@ -231,15 +231,15 @@ jobs:
         if: matrix.language == 'python'
         uses: actions/upload-artifact@v4
         with:
-          name: otlp-stdout-python-layer-manual.zip
-          path: dist/otlp-stdout-python-*.zip
+          name: otlpstdout-python-layer-manual.zip
+          path: dist/otlpstdout-python-*.zip
 
       - name: Upload Node.js Layer Artifact
         if: matrix.language == 'nodejs'
         uses: actions/upload-artifact@v4
         with:
-          name: otlp-stdout-nodejs-layer-manual.zip
-          path: dist/otlp-stdout-node-*.zip
+          name: otlpstdout-nodejs-layer-manual.zip
+          path: dist/otlpstdout-node-*.zip
 
   publish-python-layer:
     if: always() && github.event.inputs.language == 'python' && needs.build-layers.result == 'success'
@@ -248,7 +248,7 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.prepare-build-jobs.outputs.regions) }}
     with:
-      artifact-name: otlp-stdout-python-layer-manual.zip
+      artifact-name: otlpstdout-python-layer-manual.zip
       base-layer-name: ${{ needs.build-layers.outputs.LAYER_NAME }}
       component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
       upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
@@ -263,7 +263,7 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.prepare-build-jobs.outputs.regions) }}
     with:
-      artifact-name: otlp-stdout-nodejs-layer-manual.zip
+      artifact-name: otlpstdout-nodejs-layer-manual.zip
       base-layer-name: ${{ needs.build-layers.outputs.LAYER_NAME }}
       component-version: ${{ needs.build-layers.outputs.EXPORTER_VERSION }}
       upstream-version: ${{ needs.build-layers.outputs.UPSTREAM_VERSION }}
